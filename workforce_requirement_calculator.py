@@ -17,6 +17,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config_params import *
+from employee_manager import get_actual_employee_counts
 
 def simulate_workforce_scenario(senior_workers, junior_workers, df):
     """模擬指定人力配置下的工作完成情況"""
@@ -142,13 +143,16 @@ def calculate_workforce_requirements(df):
     print("="*80)
     print(f"📅 分析時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # 載入實際員工數量
+    actual_senior_count, actual_junior_count = get_actual_employee_counts()
+    
     # 分析當前配置
     print(f"\n📋 當前人力配置:")
-    print(f"   資深員工: {SENIOR_WORKERS} 人")
-    print(f"   一般員工: {JUNIOR_WORKERS} 人")
-    print(f"   總人力: {SENIOR_WORKERS + JUNIOR_WORKERS} 人")
+    print(f"   資深員工: {actual_senior_count} 人")
+    print(f"   一般員工: {actual_junior_count} 人")
+    print(f"   總人力: {actual_senior_count + actual_junior_count} 人")
     print(f"   每人日工時: {WORK_HOURS_PER_DAY} 分鐘 ({WORK_HOURS_PER_DAY//60} 小時)")
-    print(f"   總可用工時: {(SENIOR_WORKERS + JUNIOR_WORKERS) * WORK_HOURS_PER_DAY} 分鐘")
+    print(f"   總可用工時: {(actual_senior_count + actual_junior_count) * WORK_HOURS_PER_DAY} 分鐘")
     print(f"   最低目標: {MINIMUM_WORK_TARGET} 件")
     
     # 分析工作缺口
@@ -323,10 +327,10 @@ def calculate_workforce_requirements(df):
     print(f"🎯 **基於您的要求（不降低300件最低目標），推薦採用最平衡方案：**")
     print(f"")
     print(f"   📈 **具體調整：**")
-    print(f"   - 資深員工：{SENIOR_WORKERS} → {most_balanced['senior']} 人 (+{most_balanced['senior']-SENIOR_WORKERS}人)")
-    print(f"   - 一般員工：{JUNIOR_WORKERS} → {most_balanced['junior']} 人 (+{most_balanced['junior']-JUNIOR_WORKERS}人)")
-    print(f"   - 總人力：{SENIOR_WORKERS + JUNIOR_WORKERS} → {most_balanced['senior'] + most_balanced['junior']} 人")
-    print(f"   - 人力增加幅度：{((most_balanced['senior'] + most_balanced['junior']) - (SENIOR_WORKERS + JUNIOR_WORKERS))/(SENIOR_WORKERS + JUNIOR_WORKERS)*100:.1f}%")
+    print(f"   - 資深員工：{actual_senior_count} → {most_balanced['senior']} 人 (+{most_balanced['senior']-actual_senior_count}人)")
+    print(f"   - 一般員工：{actual_junior_count} → {most_balanced['junior']} 人 (+{most_balanced['junior']-actual_junior_count}人)")
+    print(f"   - 總人力：{actual_senior_count + actual_junior_count} → {most_balanced['senior'] + most_balanced['junior']} 人")
+    print(f"   - 人力增加幅度：{((most_balanced['senior'] + most_balanced['junior']) - (actual_senior_count + actual_junior_count))/(actual_senior_count + actual_junior_count)*100:.1f}%")
     print(f"")
     print(f"   💼 **預期效果：**")
     print(f"   - 工作完成量：{most_balanced['completed']} 件 (超額 {most_balanced['completed']-MINIMUM_WORK_TARGET} 件)")

@@ -1,5 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import pandas as pd
 from config_params import *
+from employee_manager import get_actual_employee_counts
 
 def main():
     """主函數 - 執行最終建議報告"""
@@ -12,12 +16,15 @@ def main():
     from path_utils import get_data_file_path
     df = pd.read_csv(get_data_file_path('result.csv'))
 
+    # 獲取實際員工數量
+    actual_senior_count, actual_junior_count = get_actual_employee_counts()
+    
     print(f"""
 📊 **數據概覽**
 • 總工作量：{len(df)} 件
 • 高難度工作(1-3級)：{len(df[df['difficulty'].isin([1,2,3])])} 件  
 • 優先權1工作：{len(df[df['priority'] == 1])} 件
-• 人力配置：資深員工{SENIOR_WORKERS}人 + 一般員工{JUNIOR_WORKERS}人
+• 人力配置：資深員工{actual_senior_count}人 + 一般員工{actual_junior_count}人
 • 每人日工時：{WORK_HOURS_PER_DAY//60}小時 ({WORK_HOURS_PER_DAY}分鐘)
 
 🏆 **最佳策略：動態優先分配法**
@@ -82,13 +89,13 @@ def main():
 
 📝 **具體操作建議**
 
-**資深員工 ({SENIOR_WORKERS}人) 主要職責：**
+**資深員工 ({actual_senior_count}人) 主要職責：**
 • 所有優先權1工作優先處理
 • 專攻難度1-3的高難度工作
 • 協助一般員工解決複雜問題
 • 處理突發緊急任務
 
-**一般員工 ({JUNIOR_WORKERS}人) 主要職責：**
+**一般員工 ({actual_junior_count}人) 主要職責：**
 • 大量處理難度4-7的工作
 • 優先完成優先權2-4的工作
 • 最後處理優先權6的工作
@@ -131,7 +138,7 @@ def main():
 • ✅ 100% 完成優先權1工作
 • ✅ 超過{MINIMUM_WORK_TARGET}件最低要求 (實際{sum(sum(counts) for counts in optimal_assignment.values())}件)
 • ✅ {sum(sum(counts) for counts in optimal_assignment.values())/len(df)*100:.1f}% 的總體工作完成率
-• ✅ {((SENIOR_WORKERS * WORK_HOURS_PER_DAY - leftover_senior) + (JUNIOR_WORKERS * WORK_HOURS_PER_DAY - leftover_junior))/((SENIOR_WORKERS + JUNIOR_WORKERS) * WORK_HOURS_PER_DAY)*100:.1f}% 的人力利用率
+• ✅ {((actual_senior_count * WORK_HOURS_PER_DAY - leftover_senior) + (actual_junior_count * WORK_HOURS_PER_DAY - leftover_junior))/((actual_senior_count + actual_junior_count) * WORK_HOURS_PER_DAY)*100:.1f}% 的人力利用率
 • ✅ 最佳的成本效益比
 
 📞 **實施支援**

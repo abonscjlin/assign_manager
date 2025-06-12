@@ -17,6 +17,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config_params import *
+from employee_manager import get_actual_employee_counts
 
 def calculate_required_time_for_gap(gap_count, df):
     """計算處理缺口工作所需的時間"""
@@ -80,7 +81,10 @@ def direct_workforce_calculation():
     print(f"   當前分配完成: {total_assigned} 件")
     print(f"   目標要求: {MINIMUM_WORK_TARGET} 件")
     print(f"   需要補足: {current_gap} 件")
-    print(f"   當前人力: {SENIOR_WORKERS}資深 + {JUNIOR_WORKERS}一般 = {SENIOR_WORKERS+JUNIOR_WORKERS}人")
+    # 載入實際員工數量
+    actual_senior_count, actual_junior_count = get_actual_employee_counts()
+    
+    print(f"   當前人力: {actual_senior_count}資深 + {actual_junior_count}一般 = {actual_senior_count+actual_junior_count}人")
     print(f"   剩餘時間: 資深{leftover_senior}分鐘, 一般{leftover_junior}分鐘")
     
     if current_gap == 0:
@@ -285,13 +289,13 @@ def direct_workforce_calculation():
     print(f"\n🎯 **推薦方案：{recommended['type']}**")
     print(f"")
     print(f"   📈 **具體調整：**")
-    print(f"   - 資深員工：{SENIOR_WORKERS} → {SENIOR_WORKERS + recommended['senior_add']} 人 (+{recommended['senior_add']}人)")
-    print(f"   - 一般員工：{JUNIOR_WORKERS} → {JUNIOR_WORKERS + recommended['junior_add']} 人 (+{recommended['junior_add']}人)")
-    print(f"   - 總人力：{SENIOR_WORKERS + JUNIOR_WORKERS} → {SENIOR_WORKERS + JUNIOR_WORKERS + recommended['senior_add'] + recommended['junior_add']} 人")
+    print(f"   - 資深員工：{actual_senior_count} → {actual_senior_count + recommended['senior_add']} 人 (+{recommended['senior_add']}人)")
+    print(f"   - 一般員工：{actual_junior_count} → {actual_junior_count + recommended['junior_add']} 人 (+{recommended['junior_add']}人)")
+    print(f"   - 總人力：{actual_senior_count + actual_junior_count} → {actual_senior_count + actual_junior_count + recommended['senior_add'] + recommended['junior_add']} 人")
     
     if recommended['senior_add'] > 0 or recommended['junior_add'] > 0:
         total_increase = recommended['senior_add'] + recommended['junior_add']
-        increase_percentage = (total_increase / (SENIOR_WORKERS + JUNIOR_WORKERS)) * 100
+        increase_percentage = (total_increase / (actual_senior_count + actual_junior_count)) * 100
         print(f"   - 人力增加幅度：{increase_percentage:.1f}%")
         
         print(f"\n   💼 **預期效果：**")

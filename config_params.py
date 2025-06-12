@@ -1,9 +1,25 @@
 # 工作排程分析系統 - 參數配置檔案
 
+# 導入模組
+try:
+    from employee_manager import get_actual_employee_counts
+except ImportError:
+    # 在初始化階段可能尚未建立employee_manager模組
+    get_actual_employee_counts = None
+
 # ===== 人力配置參數 =====
 SENIOR_WORKERS = 5           # 資深員工人數
 JUNIOR_WORKERS = 10          # 一般員工人數
 WORK_HOURS_PER_DAY = 8 * 60  # 每人每日工時(分鐘)
+
+# ===== 外部員工名單參數 =====
+# 外部員工名單JSON格式範例：
+# {
+#     "senior_workers": ["張三", "李四", "王五"],
+#     "junior_workers": ["陳六", "林七", "黃八", "周九", "吳十"]
+# }
+EXTERNAL_WORKER_LIST_FILE = "employee_list.csv"  # 外部員工名單CSV檔案
+USE_EXTERNAL_WORKER_LIST = True  # 是否使用外部員工名單
 
 # ===== 工作目標參數 =====
 MINIMUM_WORK_TARGET = 300    # 每日最低工作完成目標
@@ -51,6 +67,52 @@ def print_config():
     print(f"   資深員工時間: {SENIOR_TIME}")
     print(f"   一般員工時間: {JUNIOR_TIME}")
     print("="*50)
+
+def get_runtime_config():
+    """
+    獲取運行時配置，包括實際員工數量
+    
+    Returns:
+        dict: 包含所有配置參數的字典
+    """
+    try:
+        if get_actual_employee_counts is not None:
+            actual_senior_count, actual_junior_count = get_actual_employee_counts()
+        else:
+            from employee_manager import get_actual_employee_counts
+            actual_senior_count, actual_junior_count = get_actual_employee_counts()
+        
+        return {
+            'senior_workers': actual_senior_count,
+            'junior_workers': actual_junior_count,
+            'minimum_work_target': MINIMUM_WORK_TARGET,
+            'work_hours_per_day': WORK_HOURS_PER_DAY,
+            'senior_time': SENIOR_TIME,
+            'junior_time': JUNIOR_TIME,
+            'use_external_worker_list': USE_EXTERNAL_WORKER_LIST,
+            'external_worker_list_file': EXTERNAL_WORKER_LIST_FILE
+        }
+    except ImportError:
+        # 回退到預設值
+        return {
+            'senior_workers': SENIOR_WORKERS,
+            'junior_workers': JUNIOR_WORKERS,
+            'minimum_work_target': MINIMUM_WORK_TARGET,
+            'work_hours_per_day': WORK_HOURS_PER_DAY,
+            'senior_time': SENIOR_TIME,
+            'junior_time': JUNIOR_TIME,
+            'use_external_worker_list': USE_EXTERNAL_WORKER_LIST,
+            'external_worker_list_file': EXTERNAL_WORKER_LIST_FILE
+        }
+
+def print_runtime_config():
+    """打印運行時配置信息"""
+    config = get_runtime_config()
+    print(f"   資深員工: {config['senior_workers']} 人")
+    print(f"   一般員工: {config['junior_workers']} 人")
+    print(f"   工作目標: {config['minimum_work_target']} 件")
+    print(f"   日工時: {config['work_hours_per_day']} 分鐘")
+    return config
 
 if __name__ == "__main__":
     print_config() 

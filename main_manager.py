@@ -8,7 +8,7 @@
 
 功能包括：
 1. 最佳策略分析
-2. 工作分配給具體員工
+2. 工作分配給具體員工 (支援JSON格式員工輸入)
 3. 生成詳細統計報告
 4. 生成最終建議報告
 5. 自動人力需求分析（當未達標時）
@@ -22,6 +22,9 @@
     --report-only      只生成報告
     --workforce-only   只執行人力需求分析
     --full             執行完整流程 (預設)
+    --json-workers     使用JSON格式員工輸入 (需要--assigned-worker和--worker-type參數)
+    --assigned-worker  JSON格式的員工分配 (配合--json-workers使用)
+    --worker-type      JSON格式的員工類型 (配合--json-workers使用)
 """
 
 import sys
@@ -29,6 +32,7 @@ import os
 import argparse
 from datetime import datetime
 import pandas as pd
+import json
 
 # 添加當前目錄到Python路徑
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -44,10 +48,16 @@ import detailed_global_statistics
 from workforce_api import calculate_required_workforce, get_current_status
 from md_report_generator import generate_md_report
 
+# 導入員工管理模組
+from employee_manager import print_actual_employee_config, get_actual_employee_counts
+from update_assignment_results import assign_workers_with_json_input
+from path_utils import get_data_file_path
+
 class WorkAssignmentManager:
     """工作分配管理器"""
     
-    def __init__(self, data_file="result.csv"):
+    def __init__(self, data_file="result.csv", use_json_workers=False, 
+                 assigned_worker_json=None, worker_type_json=None):
         """初始化管理器"""
         # 智能路徑處理：確保相對路徑正確解析
         if not os.path.isabs(data_file):
@@ -59,6 +69,9 @@ class WorkAssignmentManager:
             self.data_file = data_file
             
         self.start_time = datetime.now()
+        self.use_json_workers = use_json_workers
+        self.assigned_worker_json = assigned_worker_json
+        self.worker_type_json = worker_type_json
         
         # 檢查資料檔案是否存在
         if not os.path.exists(self.data_file):
@@ -72,8 +85,19 @@ class WorkAssignmentManager:
         print("=" * 50)
         print(f"📅 執行時間: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"📊 資料檔案: {self.data_file}")
-        print(f"👥 員工配置: {SENIOR_WORKERS}名資深員工 + {JUNIOR_WORKERS}名一般員工")
+        # 載入實際員工數量顯示
+        print_actual_employee_config()
         print(f"🎯 最低目標: {MINIMUM_WORK_TARGET} 件工作")
+        
+        if self.use_json_workers:
+            print(f"🔧 使用模式: JSON格式員工輸入")
+            if self.assigned_worker_json:
+                print(f"   assigned_worker參數: {len(self.assigned_worker_json)} 字符")
+            if self.worker_type_json:
+                print(f"   worker_type參數: {len(self.worker_type_json)} 字符")
+        else:
+            print(f"🔧 使用模式: 標準員工配置")
+        
         print("=" * 50)
     
 
@@ -83,7 +107,6 @@ class WorkAssignmentManager:
         
         try:
             # 執行最佳策略分析
-            import optimal_strategy_analysis
             optimal_strategy_analysis.main()
             print("✅ 最佳策略分析完成")
         except Exception as e:
@@ -94,18 +117,43 @@ class WorkAssignmentManager:
     
     def run_assignment(self):
         """執行工作分配"""
-        print("\n👥 第2步: 執行工作分配給具體員工...")
-        
+        if self.use_json_workers:
+            print("\n👥 第2步: 使用JSON格式執行工作分配...")
+            return self.run_json_assignment()
+        else:
+            print("\n👥 第2步: 執行工作分配給具體員工...")
+            
+            try:
+                # 執行工作分配（使用統一策略管理器）
+                update_assignment_results.main()
+                print("✅ 工作分配完成")
+            except Exception as e:
+                print(f"❌ 工作分配失敗: {e}")
+                return False
+            
+            return True
+    
+    def run_json_assignment(self):
+        """使用JSON格式執行工作分配"""
         try:
-            # 執行工作分配（使用統一策略管理器）
-            import update_assignment_results
-            update_assignment_results.main()
-            print("✅ 工作分配完成")
+            # 執行JSON格式的工作分配
+            result_df, senior_workload, junior_workload, assignment_json = assign_workers_with_json_input(
+                self.assigned_worker_json, self.worker_type_json
+            )
+            
+            # 保存分配結果到原來的CSV文件
+            output_file = get_data_file_path('result.csv')
+            result_df.to_csv(output_file, index=False, encoding='utf-8')
+            print(f"📄 分配結果已保存到: {output_file}")
+            
+            print("✅ JSON格式工作分配完成")
+            return True
+            
         except Exception as e:
-            print(f"❌ 工作分配失敗: {e}")
+            print(f"❌ JSON格式工作分配失敗: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-        
-        return True
     
     def generate_reports(self):
         """生成報告"""
@@ -113,12 +161,10 @@ class WorkAssignmentManager:
         
         try:
             # 生成詳細統計報告
-            import detailed_global_statistics
             detailed_global_statistics.main()
             print("✅ 詳細統計報告生成完成")
             
             # 生成最終建議報告
-            import final_recommendation_report
             final_recommendation_report.main()
             print("✅ 最終建議報告生成完成")
             
@@ -133,8 +179,15 @@ class WorkAssignmentManager:
         print("\n🔧 第4步: 分析人力需求...")
         
         try:
-            # 檢查當前狀態
-            status = get_current_status(data_file=self.data_file)
+            # 獲取實際員工數量
+            actual_senior_count, actual_junior_count = get_actual_employee_counts()
+            
+            # 檢查當前狀態（使用實際員工數量）
+            status = get_current_status(
+                data_file=self.data_file,
+                senior_workers=actual_senior_count,
+                junior_workers=actual_junior_count
+            )
             
             if status['performance']['meets_target']:
                 print("✅ 當前配置已達成目標，無需增加人力")
@@ -152,6 +205,8 @@ class WorkAssignmentManager:
             # 計算人力需求
             result = calculate_required_workforce(
                 data_file=self.data_file,
+                current_senior=actual_senior_count,
+                current_junior=actual_junior_count,
                 strategy='cost_optimal',
                 verbose=False
             )
@@ -212,8 +267,7 @@ class WorkAssignmentManager:
                 f.write(f"配置: {result['recommended_configuration']['senior_workers']}資深 + {result['recommended_configuration']['junior_workers']}一般\n")
                 f.write(f"需要增加: +{result['workforce_changes']['senior_increase']}資深 + {result['workforce_changes']['junior_increase']}一般\n")
                 f.write(f"預期完成: {result['recommended_configuration']['completed_work']} 件\n")
-                f.write(f"成本增加: {result['cost_analysis']['cost_increase_percentage']:.1f}%\n")
-                f.write(f"利用率: {result['recommended_configuration']['overall_utilization']*100:.1f}%\n\n")
+                f.write(f"成本增加: {result['cost_analysis']['cost_increase_percentage']:.1f}%\n\n")
                 
                 f.write("實施建議:\n")
                 f.write("-" * 30 + "\n")
@@ -224,9 +278,14 @@ class WorkAssignmentManager:
                 
                 f.write("效益分析:\n")
                 f.write("-" * 30 + "\n")
-                f.write(f"工作完成提升: +{result['workforce_changes']['senior_increase'] + result['workforce_changes']['junior_increase']}人 → +{result['performance']['excess_completion']}件\n")
+                # 修正計算邏輯：工作完成提升 = 推薦配置完成數 - 當前完成數
+                work_improvement = result['recommended_configuration']['completed_work'] - status['performance']['completed_work']
+                total_people_added = result['workforce_changes']['senior_increase'] + result['workforce_changes']['junior_increase']
+                roi = work_improvement / total_people_added if total_people_added > 0 else 0
+                
+                f.write(f"工作完成提升: +{total_people_added}人 → +{work_improvement}件\n")
                 f.write(f"目標達成率: 從 {status['performance']['completed_work']/status['configuration']['target']*100:.1f}% 提升到 100%+\n")
-                f.write(f"人力投資回報: {result['performance']['excess_completion']/(result['workforce_changes']['senior_increase'] + result['workforce_changes']['junior_increase']):.1f} 件/人\n")
+                f.write(f"人力投資回報: {roi:.1f} 件/人\n")
             
             print(f"✅ 人力需求分析報告已保存: {report_file}")
             
@@ -436,6 +495,7 @@ def main():
     python main_manager.py --assign-only     # 只執行工作分配
     python main_manager.py --report-only     # 只生成報告
     python main_manager.py --workforce-only  # 只執行人力需求分析
+    python main_manager.py --json-workers --assigned-worker '{"worker1": "John", "worker2": "Jane"}' --worker-type '{"worker1": "Senior", "worker2": "Junior"}'
         """
     )
     
@@ -469,11 +529,32 @@ def main():
         help='指定資料檔案路徑 (預設: result.csv)'
     )
     
+    parser.add_argument(
+        '--json-workers',
+        action='store_true',
+        help='使用JSON格式員工輸入'
+    )
+    
+    parser.add_argument(
+        '--assigned-worker',
+        help='JSON格式的員工分配'
+    )
+    
+    parser.add_argument(
+        '--worker-type',
+        help='JSON格式的員工類型'
+    )
+    
     args = parser.parse_args()
     
     try:
         # 初始化管理器
-        manager = WorkAssignmentManager(args.data_file)
+        manager = WorkAssignmentManager(
+            args.data_file,
+            args.json_workers,
+            args.assigned_worker,
+            args.worker_type
+        )
         
         # 根據參數執行相應功能
         if args.analysis_only:

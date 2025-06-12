@@ -24,6 +24,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config_params import *
+from employee_manager import get_actual_employee_counts, load_external_employee_list
+from path_utils import get_result_file_path
 
 def get_display_width(text):
     """計算字符串的實際顯示寬度"""
@@ -71,6 +73,9 @@ def format_cell(text, width, align='left'):
 def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassigned_tasks, assignment_rate):
     """生成完整的報告內容（字符串格式）"""
     
+    # 載入員工名單
+    senior_workers, junior_workers = load_external_employee_list()
+    
     report_lines = []
     
     report_lines.append("="*80)
@@ -102,8 +107,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     report_lines.append("|----------|--------:|-------:|-------:|")
     
     senior_workloads = {}
-    for i in range(1, SENIOR_WORKERS + 1):
-        worker_name = f"SENIOR_WORKER_{i}"
+    for worker_name in senior_workers:
         worker_tasks = assigned_df[assigned_df['assigned_worker'] == worker_name]
         workload = worker_tasks['estimated_time'].sum()
         utilization = (workload / WORK_HOURS_PER_DAY) * 100
@@ -112,9 +116,10 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         
         report_lines.append(f"| {worker_name} | {workload}分鐘 | {utilization:.1f}% | {task_count}件 |")
     
-    avg_senior_workload = np.mean(list(senior_workloads.values()))
+    avg_senior_workload = np.mean(list(senior_workloads.values())) if senior_workloads else 0
     avg_senior_utilization = (avg_senior_workload / WORK_HOURS_PER_DAY) * 100
-    report_lines.append(f"| **平均** | **{avg_senior_workload:.0f}分鐘** | **{avg_senior_utilization:.1f}%** | **{senior_tasks/SENIOR_WORKERS:.1f}件** |")
+    senior_count = len(senior_workers)
+    report_lines.append(f"| **平均** | **{avg_senior_workload:.0f}分鐘** | **{avg_senior_utilization:.1f}%** | **{senior_tasks/senior_count:.1f}件** |")
     
     # === 一般員工工作負載 ===
     report_lines.append("\n⚡ 【一般員工工作負載】")
@@ -122,8 +127,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     report_lines.append("|----------|--------:|-------:|-------:|")
     
     junior_workloads = {}
-    for i in range(1, JUNIOR_WORKERS + 1):
-        worker_name = f"JUNIOR_WORKER_{i}"
+    for worker_name in junior_workers:
         worker_tasks = assigned_df[assigned_df['assigned_worker'] == worker_name]
         workload = worker_tasks['estimated_time'].sum()
         utilization = (workload / WORK_HOURS_PER_DAY) * 100
@@ -132,9 +136,10 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         
         report_lines.append(f"| {worker_name} | {workload}分鐘 | {utilization:.1f}% | {task_count}件 |")
     
-    avg_junior_workload = np.mean(list(junior_workloads.values()))
+    avg_junior_workload = np.mean(list(junior_workloads.values())) if junior_workloads else 0
     avg_junior_utilization = (avg_junior_workload / WORK_HOURS_PER_DAY) * 100
-    report_lines.append(f"| **平均** | **{avg_junior_workload:.0f}分鐘** | **{avg_junior_utilization:.1f}%** | **{junior_tasks/JUNIOR_WORKERS:.1f}件** |")
+    junior_count = len(junior_workers)
+    report_lines.append(f"| **平均** | **{avg_junior_workload:.0f}分鐘** | **{avg_junior_utilization:.1f}%** | **{junior_tasks/junior_count:.1f}件** |")
     
     # === 難度分佈分析 ===
     report_lines.append("\n🎯 【難度分佈統計】")
@@ -183,15 +188,16 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     
     # === 整體效率分析 ===
     total_estimated_time = assigned_df['estimated_time'].sum()
-    total_available_time = (SENIOR_WORKERS + JUNIOR_WORKERS) * WORK_HOURS_PER_DAY
-    overall_utilization = (total_estimated_time / total_available_time) * 100
+    total_employees = senior_count + junior_count
+    total_available_time = total_employees * WORK_HOURS_PER_DAY
+    overall_utilization = (total_estimated_time / total_available_time) * 100 if total_available_time > 0 else 0
     remaining_time = total_available_time - total_estimated_time
     
     report_lines.append("\n⚡ 【整體效率分析】")
     report_lines.append("| 效率指標 | 數值 | 說明 |")
     report_lines.append("|----------|-----:|------|")
     report_lines.append(f"| 總預估工時 | {total_estimated_time:,} 分鐘 | 所有已分配工作的預估時間 |")
-    report_lines.append(f"| 總可用工時 | {total_available_time:,} 分鐘 | 15名員工 × 8小時 |")
+    report_lines.append(f"| 總可用工時 | {total_available_time:,} 分鐘 | {total_employees}名員工 × 8小時 |")
     report_lines.append(f"| 整體利用率 | {overall_utilization:.1f}% | 工時使用效率 |")
     report_lines.append(f"| 剩餘工時 | {remaining_time:,} 分鐘 | 未使用的工作時間 |")
     report_lines.append(f"| 剩餘工時(小時) | {remaining_time/60:.1f} 小時 | 約 {remaining_time/60:.1f} 小時的餘裕 |")
@@ -273,7 +279,6 @@ def generate_detailed_statistics():
     """生成詳細統計分析"""
     
     # 讀取分配結果
-    from path_utils import get_result_file_path
     result_file = get_result_file_path('result_with_assignments.csv')
     
     if not os.path.exists(result_file):
@@ -309,7 +314,6 @@ def main():
         return None
 
     # 保存完整的詳細報告到文件
-    from path_utils import get_result_file_path
     report_file = get_result_file_path('detailed_statistics_report.txt')
     
     with open(report_file, 'w', encoding='utf-8') as f:

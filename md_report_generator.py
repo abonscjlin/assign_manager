@@ -8,7 +8,8 @@ MD格式分析報告生成器
 import os
 import pandas as pd
 from datetime import datetime
-from config_params import SENIOR_WORKERS, JUNIOR_WORKERS, MINIMUM_WORK_TARGET
+from config_params import MINIMUM_WORK_TARGET
+from employee_manager import get_actual_employee_counts
 
 class MDReportGenerator:
     def __init__(self, script_dir):
@@ -90,6 +91,9 @@ class MDReportGenerator:
         """生成完整的MD格式報告"""
         self.collect_data()
         
+        # 載入真實員工數量
+        actual_senior_count, actual_junior_count = get_actual_employee_counts()
+        
         # 生成報告標題
         timestamp = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
         md = f"""# 工作分配管理系統 - 分析報告
@@ -103,8 +107,8 @@ class MDReportGenerator:
 ## 執行概覽
 
 ### 系統配置
-- **資深員工數量：** {SENIOR_WORKERS} 人
-- **一般員工數量：** {JUNIOR_WORKERS} 人
+- **資深員工數量：** {actual_senior_count} 人
+- **一般員工數量：** {actual_junior_count} 人
 - **最低工作目標：** {MINIMUM_WORK_TARGET} 件
 - **每人日工時：** 8 小時 (480 分鐘)
 

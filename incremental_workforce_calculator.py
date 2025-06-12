@@ -17,7 +17,9 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config_params import *
+from employee_manager import get_actual_employee_counts
 from strategy_manager import StrategyManager
+from path_utils import get_data_file_path
 
 class IncrementalWorkforceCalculator:
     """遞增式人力需求計算器"""
@@ -31,9 +33,17 @@ class IncrementalWorkforceCalculator:
         """
         self.data_file = data_file
         
-        # 設置基礎參數（如果外部沒有提供則使用config）
-        self.base_senior_workers = base_params.get('senior_workers', SENIOR_WORKERS)
-        self.base_junior_workers = base_params.get('junior_workers', JUNIOR_WORKERS)
+        # 設置基礎參數（如果外部沒有提供則使用實際員工數量）
+        if 'senior_workers' not in base_params or 'junior_workers' not in base_params:
+            actual_senior_count, actual_junior_count = get_actual_employee_counts()
+            default_senior = actual_senior_count
+            default_junior = actual_junior_count
+        else:
+            default_senior = SENIOR_WORKERS
+            default_junior = JUNIOR_WORKERS
+            
+        self.base_senior_workers = base_params.get('senior_workers', default_senior)
+        self.base_junior_workers = base_params.get('junior_workers', default_junior)
         self.work_hours_per_day = base_params.get('work_hours_per_day', WORK_HOURS_PER_DAY)
         self.minimum_work_target = base_params.get('minimum_work_target', MINIMUM_WORK_TARGET)
         self.senior_time = base_params.get('senior_time', SENIOR_TIME)
@@ -41,7 +51,6 @@ class IncrementalWorkforceCalculator:
         
         # 載入數據
         if not self.data_file:
-            from path_utils import get_data_file_path
             self.data_file = get_data_file_path('result.csv')
         
         self.df = pd.read_csv(self.data_file)
