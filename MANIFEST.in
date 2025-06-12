@@ -1,0 +1,28 @@
+# 工作分配管理系統 - 打包清單
+# Work Assignment Management System - Package Manifest
+
+# 包含文檔文件
+include README.md
+include requirements.txt
+include MANIFEST.in
+
+# 包含配置文件
+include config_params.py
+
+# 包含示例數據文件
+include result.csv
+
+# 包含結果目錄結構
+recursive-include result/ *.txt *.csv *.md
+
+# 包含所有Python源代碼
+recursive-include . *.py
+
+# 排除不必要的文件
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *~
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+global-exclude __pycache__/ 
