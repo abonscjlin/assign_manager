@@ -19,10 +19,28 @@ def main():
     # 獲取實際員工數量
     actual_senior_count, actual_junior_count = get_actual_employee_counts()
     
+    # 使用統一策略管理器（避免重複計算）
+    from strategy_manager import get_strategy_manager
+    manager = get_strategy_manager()
+    manager.load_data()
+    optimal_assignment = manager.get_optimal_assignment()
+    leftover_senior, leftover_junior = manager.get_leftover_time()
+    summary = manager.get_strategy_summary()
+    
+    # 計算動態數據以替代hard code
+    high_difficulty_work = len(df[df['difficulty'].isin(HIGH_DIFFICULTY_LEVELS)])
+    total_completed = sum(sum(counts) for counts in optimal_assignment.values())
+    uncompleted_work = len(df) - total_completed
+    
+    # 計算未完成工作中優先權5-6的數量（估算）
+    priority_5_6_total = len(df[df['priority'].isin([5, 6])])
+    # 假設優先權5-6在未完成工作中的比例與總數據中的比例相同
+    low_priority_uncompleted = int(uncompleted_work * (priority_5_6_total / len(df))) if uncompleted_work > 0 else 0
+    
     print(f"""
 📊 **數據概覽**
 • 總工作量：{len(df)} 件
-• 高難度工作(1-3級)：{len(df[df['difficulty'].isin([1,2,3])])} 件  
+• 低難度工作(1-3級)：{len(df[df['difficulty'].isin([1,2,3])])} 件  
 • 優先權1工作：{len(df[df['priority'] == 1])} 件
 • 人力配置：資深員工{actual_senior_count}人 + 一般員工{actual_junior_count}人
 • 每人日工時：{WORK_HOURS_PER_DAY//60}小時 ({WORK_HOURS_PER_DAY}分鐘)
@@ -32,21 +50,13 @@ def main():
 根據多種策略的比較分析，推薦採用"動態優先分配法"：
 
 📈 **策略績效**
-• 工作完成率：96.4% (321/333件)
-• 人力利用率：99.7%
-• 達成{MINIMUM_WORK_TARGET}件最低要求：✅ 是
+• 工作完成率：{total_completed/len(df)*100:.1f}% ({total_completed}/{len(df)}件)
+• 人力利用率：{((actual_senior_count * WORK_HOURS_PER_DAY - leftover_senior) + (actual_junior_count * WORK_HOURS_PER_DAY - leftover_junior))/((actual_senior_count + actual_junior_count) * WORK_HOURS_PER_DAY)*100:.1f}%
+• 達成{MINIMUM_WORK_TARGET}件最低要求：{'✅ 是' if total_completed >= MINIMUM_WORK_TARGET else '❌ 否'}
 • 優先權1完成率：100%
 
 📋 **具體人力分配**
 """)
-
-    # 使用統一策略管理器（避免重複計算）
-    from strategy_manager import get_strategy_manager
-    manager = get_strategy_manager()
-    manager.load_data()
-    optimal_assignment = manager.get_optimal_assignment()
-    leftover_senior, leftover_junior = manager.get_leftover_time()
-    summary = manager.get_strategy_summary()
 
     print("難度 | 資深員工 | 一般員工 | 資深用時 | 一般用時 | 總件數")
     print("-" * 55)
@@ -79,8 +89,8 @@ def main():
 
 2️⃣ **第二階段：確保{MINIMUM_WORK_TARGET}件最低目標**
    • 按優先權2→3→4→5順序分配工作
-   • 資深員工專攻高難度 (1-3級)，一般員工處理中低難度 (4-7級)
-   • 如需要，優先增加難度7的簡單工作
+   • 資深員工專攻高難度 (6-7級)，一般員工處理中低難度 (1-5級)
+   • 如需要，優先增加難度1的簡單工作
 
 3️⃣ **第三階段：剩餘時間最大化產出**
    • 利用剩餘的{leftover_junior}分鐘一般員工時間
@@ -91,23 +101,23 @@ def main():
 
 **資深員工 ({actual_senior_count}人) 主要職責：**
 • 所有優先權1工作優先處理
-• 專攻難度1-3的高難度工作
+• 專攻難度6-7的高難度工作
 • 協助一般員工解決複雜問題
 • 處理突發緊急任務
 
 **一般員工 ({actual_junior_count}人) 主要職責：**
-• 大量處理難度4-7的工作
+• 大量處理難度1-5的工作
 • 優先完成優先權2-4的工作
 • 最後處理優先權6的工作
 
 ⚠️ **風險控制**
 
 🔴 **高風險項目：**
-• 高難度工作(34件)接近資深員工處理極限
+• 高難度工作({high_difficulty_work}件)接近資深員工處理極限
 • 建議預留10-15%彈性時間應對突發狀況
 
 🟡 **中等風險：**
-• 約12件優先權5-6工作可能延後完成
+• 約{uncompleted_work}件工作可能延後完成，其中估計包含{low_priority_uncompleted}件優先權5-6工作
 • 建議設立次日優先處理機制
 
 ✅ **風險緩解措施：**
@@ -136,8 +146,8 @@ def main():
 
 使用此策略，預期可以達到：
 • ✅ 100% 完成優先權1工作
-• ✅ 超過{MINIMUM_WORK_TARGET}件最低要求 (實際{sum(sum(counts) for counts in optimal_assignment.values())}件)
-• ✅ {sum(sum(counts) for counts in optimal_assignment.values())/len(df)*100:.1f}% 的總體工作完成率
+• {'✅ 超過' if total_completed >= MINIMUM_WORK_TARGET else '❌ 未達'}{MINIMUM_WORK_TARGET}件最低要求 (實際{total_completed}件)
+• ✅ {total_completed/len(df)*100:.1f}% 的總體工作完成率
 • ✅ {((actual_senior_count * WORK_HOURS_PER_DAY - leftover_senior) + (actual_junior_count * WORK_HOURS_PER_DAY - leftover_junior))/((actual_senior_count + actual_junior_count) * WORK_HOURS_PER_DAY)*100:.1f}% 的人力利用率
 • ✅ 最佳的成本效益比
 

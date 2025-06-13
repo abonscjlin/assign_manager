@@ -6,35 +6,56 @@ import random
 from employee_manager import load_external_employee_list
 import json
 import os
+from strategy_manager import get_strategy_manager
+from path_utils import get_data_file_path, get_result_file_path
 
-def assign_workers_to_tasks():
-    """將工作分配給具體的員工並更新CSV"""
+def assign_workers_to_tasks(work_data=None, employee_data=None):
+    """將工作分配給具體的員工並更新CSV
     
-    # 讀取原始數據
-    from path_utils import get_data_file_path
-    df = pd.read_csv(get_data_file_path('result.csv'))
+    Args:
+        work_data: 工作數據DataFrame，如果為None則讀取本地CSV
+        employee_data: 員工數據，可以是：
+                      1. DataFrame（包含 level 或 type 列）
+                      2. 字典列表格式：[{"id": "員工ID", "type": "SENIOR/JUNIOR"}]
+                      3. None（讀取本地員工檔案）
+        
+    Returns:
+        tuple: (updated_df, senior_workload, junior_workload)
+    """
     
+    # 使用策略管理器統一處理數據來源
     print("🔍 使用統一策略管理器獲取最佳策略...")
-    from strategy_manager import get_strategy_manager
-    manager = get_strategy_manager()
-    manager.load_data()
-    best_assignment = manager.get_optimal_assignment()
-    leftover_senior, leftover_junior = manager.get_leftover_time()
     
-    # 轉換為我們需要的格式
-    optimal_assignment = {}
-    for difficulty, (senior_count, junior_count) in best_assignment.items():
-        optimal_assignment[difficulty] = [senior_count, junior_count]
+    # 創建策略管理器實例，自動處理數據來源
+    strategy_manager = get_strategy_manager(work_data=work_data, employee_data=employee_data)
+    
+    # 顯示配置來源信息
+    print(f"📊 使用配置來源: 工作數據來自{strategy_manager.config_source['work_data_source']}, 員工數據來自{strategy_manager.config_source['employee_data_source']}")
+    print(f"📊 使用員工配置: 資深{strategy_manager.senior_workers}人, 一般{strategy_manager.junior_workers}人")
+    
+    # 獲取工作數據
+    df = strategy_manager.get_data()
+    
+    # 計算最佳策略
+    optimal_assignment = strategy_manager.get_optimal_assignment()
+    leftover_senior, leftover_junior = strategy_manager.get_leftover_time()
+    
+    # 使用 StrategyManager 的統一員工名單提取邏輯
+    senior_workers, junior_workers = strategy_manager.get_employee_lists()
+    
+    if employee_data is None:
+        print("👥 使用本地員工檔案: employee_list.csv")
+    elif hasattr(employee_data, 'shape'):
+        print("👥 使用外部提供的員工數據（DataFrame）")
+    else:
+        print("👥 使用外部提供的員工數據（列表）")
     
     print(f"📋 最佳分配方案:")
     for diff in sorted(optimal_assignment.keys()):
-        senior_count, junior_count = optimal_assignment[diff]
-        print(f"   難度 {diff}: 資深員工 {senior_count} 件, 一般員工 {junior_count} 件")
+        senior_count_for_diff, junior_count_for_diff = optimal_assignment[diff]
+        print(f"   難度 {diff}: 資深員工 {senior_count_for_diff} 件, 一般員工 {junior_count_for_diff} 件")
     
     print("=== 🎯 根據最佳策略分配工作給具體員工 ===")
-    
-    # 載入員工名單（支援外部輸入）
-    senior_workers, junior_workers = load_external_employee_list()
     
     print(f"👥 員工名單:")
     print(f"   資深員工: {senior_workers}")
@@ -73,43 +94,94 @@ def assign_workers_to_tasks():
         
         assigned = False
         
-        # 優先按照策略分配：先資深員工配額，再一般員工配額
-        if senior_quota > 0:
-            # 找可用的資深員工
-            available_senior = [w for w in senior_workers 
-                              if senior_workload[w] + SENIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
-            if available_senior:
-                assigned_worker = min(available_senior, key=lambda w: senior_workload[w])
-                df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
-                df_sorted.loc[idx, 'worker_type'] = 'SENIOR'
-                df_sorted.loc[idx, 'estimated_time'] = SENIOR_TIME[difficulty]
-                senior_workload[assigned_worker] += SENIOR_TIME[difficulty]
-                remaining_quota[difficulty]['senior'] -= 1
-                assigned = True
-                assigned_count += 1
+        # 按照策略分配：根據難度和配額比例決定分配優先順序
+        total_quota = senior_quota + junior_quota
+        if total_quota > 0:
+            # 計算分配比例
+            senior_ratio = senior_quota / total_quota if total_quota > 0 else 0
+            junior_ratio = junior_quota / total_quota if total_quota > 0 else 0
+            
+            # 根據難度級別和配額比例決定優先順序
+            prefer_senior = False
+            if difficulty in HIGH_DIFFICULTY_LEVELS:  # 6-7級優先給資深員工
+                prefer_senior = True
+            elif senior_ratio > 0.6:  # 資深員工配額占比超過60%時優先分配
+                prefer_senior = True
+            
+            if prefer_senior and senior_quota > 0:
+                # 優先分配給資深員工
+                available_senior = [w for w in senior_workers 
+                                  if senior_workload[w] + SENIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
+                if available_senior:
+                    assigned_worker = min(available_senior, key=lambda w: senior_workload[w])
+                    df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                    df_sorted.loc[idx, 'worker_type'] = 'SENIOR'
+                    df_sorted.loc[idx, 'estimated_time'] = SENIOR_TIME[difficulty]
+                    senior_workload[assigned_worker] += SENIOR_TIME[difficulty]
+                    remaining_quota[difficulty]['senior'] -= 1
+                    assigned = True
+                    assigned_count += 1
+                elif junior_quota > 0:
+                    # 資深員工無法承擔，分配給一般員工
+                    available_junior = [w for w in junior_workers 
+                                       if junior_workload[w] + JUNIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
+                    if available_junior:
+                        assigned_worker = min(available_junior, key=lambda w: junior_workload[w])
+                        df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                        df_sorted.loc[idx, 'worker_type'] = 'JUNIOR'
+                        df_sorted.loc[idx, 'estimated_time'] = JUNIOR_TIME[difficulty]
+                        junior_workload[assigned_worker] += JUNIOR_TIME[difficulty]
+                        remaining_quota[difficulty]['junior'] -= 1
+                        assigned = True
+                        assigned_count += 1
+            else:
+                # 優先分配給一般員工
+                if junior_quota > 0:
+                    available_junior = [w for w in junior_workers 
+                                       if junior_workload[w] + JUNIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
+                    if available_junior:
+                        assigned_worker = min(available_junior, key=lambda w: junior_workload[w])
+                        df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                        df_sorted.loc[idx, 'worker_type'] = 'JUNIOR'
+                        df_sorted.loc[idx, 'estimated_time'] = JUNIOR_TIME[difficulty]
+                        junior_workload[assigned_worker] += JUNIOR_TIME[difficulty]
+                        remaining_quota[difficulty]['junior'] -= 1
+                        assigned = True
+                        assigned_count += 1
+                    elif senior_quota > 0:
+                        # 一般員工無法承擔，分配給資深員工
+                        available_senior = [w for w in senior_workers 
+                                          if senior_workload[w] + SENIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
+                        if available_senior:
+                            assigned_worker = min(available_senior, key=lambda w: senior_workload[w])
+                            df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                            df_sorted.loc[idx, 'worker_type'] = 'SENIOR'
+                            df_sorted.loc[idx, 'estimated_time'] = SENIOR_TIME[difficulty]
+                            senior_workload[assigned_worker] += SENIOR_TIME[difficulty]
+                            remaining_quota[difficulty]['senior'] -= 1
+                            assigned = True
+                            assigned_count += 1
+                elif senior_quota > 0:
+                    # 只有資深員工配額
+                    available_senior = [w for w in senior_workers 
+                                      if senior_workload[w] + SENIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
+                    if available_senior:
+                        assigned_worker = min(available_senior, key=lambda w: senior_workload[w])
+                        df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                        df_sorted.loc[idx, 'worker_type'] = 'SENIOR'
+                        df_sorted.loc[idx, 'estimated_time'] = SENIOR_TIME[difficulty]
+                        senior_workload[assigned_worker] += SENIOR_TIME[difficulty]
+                        remaining_quota[difficulty]['senior'] -= 1
+                        assigned = True
+                        assigned_count += 1
         
-        if not assigned and junior_quota > 0:
-            # 找可用的一般員工
-            available_junior = [w for w in junior_workers 
-                               if junior_workload[w] + JUNIOR_TIME[difficulty] <= WORK_HOURS_PER_DAY]
-            if available_junior:
-                assigned_worker = min(available_junior, key=lambda w: junior_workload[w])
-                df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
-                df_sorted.loc[idx, 'worker_type'] = 'JUNIOR'
-                df_sorted.loc[idx, 'estimated_time'] = JUNIOR_TIME[difficulty]
-                junior_workload[assigned_worker] += JUNIOR_TIME[difficulty]
-                remaining_quota[difficulty]['junior'] -= 1
-                assigned = True
-                assigned_count += 1
-        
-        # 如果策略配額已用完，但還有剩餘時間，則繼續分配
+        # 如果策略配額已用完，但還有剩餘時間，則根據難度合理分配
         if not assigned:
-            # 選擇效率更高的員工類型
             senior_time = SENIOR_TIME[difficulty]
             junior_time = JUNIOR_TIME[difficulty]
             
-            if senior_time <= junior_time:
-                # 資深員工更有效率，優先分配
+            # 根據難度等級決定分配優先順序
+            if difficulty in HIGH_DIFFICULTY_LEVELS:  # 6-7級優先給資深員工
                 available_senior = [w for w in senior_workers 
                                   if senior_workload[w] + senior_time <= WORK_HOURS_PER_DAY]
                 if available_senior:
@@ -120,9 +192,19 @@ def assign_workers_to_tasks():
                     senior_workload[assigned_worker] += senior_time
                     assigned = True
                     assigned_count += 1
-            
-            if not assigned:
-                # 分配給一般員工
+                else:
+                    # 資深員工無法承擔，分配給一般員工
+                    available_junior = [w for w in junior_workers 
+                                       if junior_workload[w] + junior_time <= WORK_HOURS_PER_DAY]
+                    if available_junior:
+                        assigned_worker = min(available_junior, key=lambda w: junior_workload[w])
+                        df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                        df_sorted.loc[idx, 'worker_type'] = 'JUNIOR'
+                        df_sorted.loc[idx, 'estimated_time'] = junior_time
+                        junior_workload[assigned_worker] += junior_time
+                        assigned = True
+                        assigned_count += 1
+            else:  # 1-5級優先給一般員工
                 available_junior = [w for w in junior_workers 
                                    if junior_workload[w] + junior_time <= WORK_HOURS_PER_DAY]
                 if available_junior:
@@ -133,38 +215,71 @@ def assign_workers_to_tasks():
                     junior_workload[assigned_worker] += junior_time
                     assigned = True
                     assigned_count += 1
+                else:
+                    # 一般員工無法承擔，分配給資深員工
+                    available_senior = [w for w in senior_workers 
+                                      if senior_workload[w] + senior_time <= WORK_HOURS_PER_DAY]
+                    if available_senior:
+                        assigned_worker = min(available_senior, key=lambda w: senior_workload[w])
+                        df_sorted.loc[idx, 'assigned_worker'] = assigned_worker
+                        df_sorted.loc[idx, 'worker_type'] = 'SENIOR'
+                        df_sorted.loc[idx, 'estimated_time'] = senior_time
+                        senior_workload[assigned_worker] += senior_time
+                        assigned = True
+                        assigned_count += 1
     
     print(f"✅ 工作分配完成: {assigned_count} 件")
     
     # 生成統計報告
     total_assigned = len(df_sorted[df_sorted['assigned_worker'] != 'UNASSIGNED'])
     
-    # 計算實際的剩餘時間
+    # 計算實際的剩餘時間 (使用實際員工數量)
     actual_senior_used = sum(senior_workload.values())
     actual_junior_used = sum(junior_workload.values())
-    actual_leftover_senior = SENIOR_WORKERS * WORK_HOURS_PER_DAY - actual_senior_used
-    actual_leftover_junior = JUNIOR_WORKERS * WORK_HOURS_PER_DAY - actual_junior_used
+    actual_senior_count = len(senior_workers)
+    actual_junior_count = len(junior_workers)
+    actual_leftover_senior = actual_senior_count * WORK_HOURS_PER_DAY - actual_senior_used
+    actual_leftover_junior = actual_junior_count * WORK_HOURS_PER_DAY - actual_junior_used
+    
+    # 使用策略管理器統一計算統計信息
+    strategy_summary = strategy_manager.get_strategy_summary()
     
     print(f"\n=== 📊 最終分配統計 ===")
     print(f"總工作數: {len(df_sorted)} 件")
     print(f"已分配工作: {total_assigned} 件")
     print(f"未分配工作: {len(df_sorted) - total_assigned} 件")
-    print(f"分配完成率: {total_assigned/len(df_sorted)*100:.1f}%")
-    print(f"資深員工時間利用率: {actual_senior_used/(SENIOR_WORKERS * WORK_HOURS_PER_DAY)*100:.1f}%")
-    print(f"一般員工時間利用率: {actual_junior_used/(JUNIOR_WORKERS * WORK_HOURS_PER_DAY)*100:.1f}%")
-    print(f"剩餘資深員工時間: {actual_leftover_senior} 分鐘")
-    print(f"剩餘一般員工時間: {actual_leftover_junior} 分鐘")
     
-    # 比較預期與實際的差異
-    if abs(actual_leftover_senior - leftover_senior) > 5 or abs(actual_leftover_junior - leftover_junior) > 5:
-        print(f"\n⚠️ 注意：實際剩餘時間與策略預期有差異")
-        print(f"   策略預期剩餘：資深{leftover_senior}分鐘，一般{leftover_junior}分鐘")
-        print(f"   實際剩餘：資深{actual_leftover_senior}分鐘，一般{actual_leftover_junior}分鐘")
+    # 避免除零錯誤
+    completion_rate = (total_assigned/len(df_sorted)*100) if len(df_sorted) > 0 else 0
+    print(f"分配完成率: {completion_rate:.1f}%")
+    
+    print(f"資深員工時間利用率: {strategy_summary['senior_utilization']*100:.1f}%")
+    print(f"一般員工時間利用率: {strategy_summary['junior_utilization']*100:.1f}%")
+    print(f"剩餘資深員工時間: {strategy_summary['leftover_senior']} 分鐘")
+    print(f"剩餘一般員工時間: {strategy_summary['leftover_junior']} 分鐘")
+    
+    # 目標達成檢查
+    if strategy_summary['meets_minimum']:
+        print(f"✅ 達到最低目標 ({strategy_summary['parameters']['minimum_work_target']} 件)")
+    else:
+        print(f"❌ 未達最低目標 ({strategy_summary['parameters']['minimum_work_target']} 件)")
     
     return df_sorted, senior_workload, junior_workload
 
-def generate_global_statistics(df, senior_workload, junior_workload):
-    """生成全局統計數據"""
+def generate_global_statistics(df, senior_workload, junior_workload, work_data=None, employee_data=None):
+    """生成全局統計數據，使用策略管理器統一計算
+    
+    Args:
+        df: 分配結果 DataFrame
+        senior_workload: 資深員工工作負載字典
+        junior_workload: 一般員工工作負載字典
+        work_data: 工作數據，如果為 None 則使用傳入的 df
+        employee_data: 員工數據，如果為 None 則讀取本地 CSV
+    """
+    
+    # 使用策略管理器獲取統一的統計信息
+    strategy_manager = get_strategy_manager(work_data=work_data or df, employee_data=employee_data)
+    strategy_summary = strategy_manager.get_strategy_summary()
     
     print(f"\n" + "="*60)
     print(f"📈 全局統計數據報告")
@@ -179,15 +294,18 @@ def generate_global_statistics(df, senior_workload, junior_workload):
     print(f"   總工作數量: {total_tasks:,} 件")
     print(f"   已分配工作: {assigned_tasks:,} 件")
     print(f"   未分配工作: {unassigned_tasks:,} 件")
-    print(f"   分配成功率: {assigned_tasks/total_tasks*100:.1f}%")
+    success_rate = (assigned_tasks/total_tasks*100) if total_tasks > 0 else 0
+    print(f"   分配成功率: {success_rate:.1f}%")
     
     # 按員工類型統計
     senior_assigned = len(df[df['worker_type'] == 'SENIOR'])
     junior_assigned = len(df[df['worker_type'] == 'JUNIOR'])
     
     print(f"\n👥 **員工類型分配**")
-    print(f"   資深員工負責: {senior_assigned:,} 件 ({senior_assigned/assigned_tasks*100:.1f}%)")
-    print(f"   一般員工負責: {junior_assigned:,} 件 ({junior_assigned/assigned_tasks*100:.1f}%)")
+    senior_pct = (senior_assigned/assigned_tasks*100) if assigned_tasks > 0 else 0
+    junior_pct = (junior_assigned/assigned_tasks*100) if assigned_tasks > 0 else 0
+    print(f"   資深員工負責: {senior_assigned:,} 件 ({senior_pct:.1f}%)")
+    print(f"   一般員工負責: {junior_assigned:,} 件 ({junior_pct:.1f}%)")
     
     # 工作負載統計
     print(f"\n⏱️ **工作負載分析**")
@@ -228,48 +346,45 @@ def generate_global_statistics(df, senior_workload, junior_workload):
     for priority in sorted(assigned_df['priority'].unique()):
         priority_tasks = df[df['priority'] == priority]
         assigned_priority = assigned_df[assigned_df['priority'] == priority]
-        completion_rate = len(assigned_priority) / len(priority_tasks) * 100
+        completion_rate = (len(assigned_priority) / len(priority_tasks) * 100) if len(priority_tasks) > 0 else 0
         
         print(f"   優先權 {priority}: {len(assigned_priority):3d}/{len(priority_tasks):3d}件 ({completion_rate:5.1f}%)")
     
-    # 時間統計
-    total_estimated_time = assigned_df['estimated_time'].sum()
-    total_available_time = (SENIOR_WORKERS + JUNIOR_WORKERS) * WORK_HOURS_PER_DAY
-    overall_utilization = total_estimated_time / total_available_time * 100
-    
+    # 使用策略管理器統一的統計信息
     print(f"\n⚡ **整體效率分析**")
-    print(f"   總預估工時: {total_estimated_time:,} 分鐘")
-    print(f"   總可用工時: {total_available_time:,} 分鐘")
-    print(f"   整體利用率: {overall_utilization:.1f}%")
-    print(f"   剩餘工時: {total_available_time - total_estimated_time:,} 分鐘")
+    print(f"   整體利用率: {strategy_summary['overall_utilization']*100:.1f}%")
+    print(f"   剩餘資深員工時間: {strategy_summary['leftover_senior']:,} 分鐘")
+    print(f"   剩餘一般員工時間: {strategy_summary['leftover_junior']:,} 分鐘")
+    print(f"   總剩餘工時: {strategy_summary['leftover_senior'] + strategy_summary['leftover_junior']:,} 分鐘")
+    print(f"   總剩餘工時(小時): {(strategy_summary['leftover_senior'] + strategy_summary['leftover_junior'])//60:.1f} 小時")
     
     # 目標達成情況
     print(f"\n🎯 **目標達成情況**")
-    meets_target = assigned_tasks >= MINIMUM_WORK_TARGET
-    print(f"   最低目標: {MINIMUM_WORK_TARGET} 件")
+    print(f"   最低目標: {strategy_summary['parameters']['minimum_work_target']} 件")
     print(f"   實際完成: {assigned_tasks} 件")
-    print(f"   目標達成: {'✅ 是' if meets_target else '❌ 否'}")
+    print(f"   目標達成: {'✅ 是' if strategy_summary['meets_minimum'] else '❌ 否'}")
     
-    if meets_target:
-        excess = assigned_tasks - MINIMUM_WORK_TARGET
-        print(f"   超額完成: {excess} 件 ({excess/MINIMUM_WORK_TARGET*100:.1f}%)")
+    if strategy_summary['meets_minimum']:
+        excess = assigned_tasks - strategy_summary['parameters']['minimum_work_target']
+        print(f"   超額完成: {excess} 件 ({excess/strategy_summary['parameters']['minimum_work_target']*100:.1f}%)")
     else:
-        shortage = MINIMUM_WORK_TARGET - assigned_tasks
+        shortage = strategy_summary['parameters']['minimum_work_target'] - assigned_tasks
         print(f"   缺少完成: {shortage} 件")
     
     return {
         'total_tasks': total_tasks,
         'assigned_tasks': assigned_tasks,
         'unassigned_tasks': unassigned_tasks,
-        'assignment_rate': assigned_tasks/total_tasks*100,
+        'assignment_rate': (assigned_tasks/total_tasks*100) if total_tasks > 0 else 0,
         'senior_assigned': senior_assigned,
         'junior_assigned': junior_assigned,
         'avg_senior_utilization': avg_senior_utilization,
         'avg_junior_utilization': avg_junior_utilization,
-        'overall_utilization': overall_utilization,
-        'meets_target': meets_target,
+        'overall_utilization': strategy_summary['overall_utilization']*100,
+        'meets_target': strategy_summary['meets_minimum'],
         'senior_workload': senior_workload,
-        'junior_workload': junior_workload
+        'junior_workload': junior_workload,
+        'strategy_summary': strategy_summary  # 添加完整的策略摘要
     }
 
 def assign_workers_with_json_input(assigned_worker_json: str = None, worker_type_json: str = None):
@@ -287,7 +402,6 @@ def assign_workers_with_json_input(assigned_worker_json: str = None, worker_type
     print("=== 🎯 使用JSON輸入分配工作給員工 ===")
     
     # 讀取原始數據
-    from path_utils import get_data_file_path
     df = pd.read_csv(get_data_file_path('result.csv'))
     
     # 解析JSON輸入
@@ -328,7 +442,6 @@ def assign_workers_with_json_input(assigned_worker_json: str = None, worker_type
     
     # 獲取最佳策略 - 使用實際員工數量重新計算
     print("🔍 使用統一策略管理器獲取最佳策略...")
-    from strategy_manager import get_strategy_manager
     manager = get_strategy_manager()
     manager.load_data()
     
@@ -487,7 +600,6 @@ def main():
     stats = generate_global_statistics(updated_df, senior_workload, junior_workload)
 
     # 儲存更新後的CSV
-    from path_utils import get_result_file_path
     output_filename = get_result_file_path('result_with_assignments.csv')
     updated_df.to_csv(output_filename, index=False)
 

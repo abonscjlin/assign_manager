@@ -70,11 +70,27 @@ def format_cell(text, width, align='left'):
     else:  # left
         return text + ' ' * spaces_needed
 
-def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassigned_tasks, assignment_rate):
-    """生成完整的報告內容（字符串格式）"""
+def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassigned_tasks, assignment_rate, work_data=None, employee_data=None):
+    """生成完整的報告內容（字符串格式）
     
-    # 載入員工名單
-    senior_workers, junior_workers = load_external_employee_list()
+    Args:
+        df: 原始工作數據
+        assigned_df: 已分配工作數據
+        total_tasks: 總工作數
+        assigned_tasks: 已分配工作數
+        unassigned_tasks: 未分配工作數
+        assignment_rate: 分配成功率
+        work_data: 外部工作數據（可選）
+        employee_data: 外部員工數據（可選）
+    """
+    
+    # 使用策略管理器獲取統一的統計信息
+    from strategy_manager import get_strategy_manager
+    strategy_manager = get_strategy_manager(work_data=work_data, employee_data=employee_data)
+    strategy_summary = strategy_manager.get_strategy_summary()
+    
+    # 使用 StrategyManager 的統一員工名單提取邏輯
+    senior_workers, junior_workers = strategy_manager.get_employee_lists()
     
     report_lines = []
     
@@ -186,41 +202,36 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         
         report_lines.append(f"| 優先權{priority} | {total_priority} 件 | {completed_priority} 件 | {completion_rate:.1f}% | {status} |")
     
-    # === 整體效率分析 ===
-    total_estimated_time = assigned_df['estimated_time'].sum()
-    total_employees = senior_count + junior_count
-    total_available_time = total_employees * WORK_HOURS_PER_DAY
-    overall_utilization = (total_estimated_time / total_available_time) * 100 if total_available_time > 0 else 0
-    remaining_time = total_available_time - total_estimated_time
-    
+    # === 整體效率分析 === 使用策略管理器統一計算
     report_lines.append("\n⚡ 【整體效率分析】")
     report_lines.append("| 效率指標 | 數值 | 說明 |")
     report_lines.append("|----------|-----:|------|")
-    report_lines.append(f"| 總預估工時 | {total_estimated_time:,} 分鐘 | 所有已分配工作的預估時間 |")
-    report_lines.append(f"| 總可用工時 | {total_available_time:,} 分鐘 | {total_employees}名員工 × 8小時 |")
-    report_lines.append(f"| 整體利用率 | {overall_utilization:.1f}% | 工時使用效率 |")
-    report_lines.append(f"| 剩餘工時 | {remaining_time:,} 分鐘 | 未使用的工作時間 |")
-    report_lines.append(f"| 剩餘工時(小時) | {remaining_time/60:.1f} 小時 | 約 {remaining_time/60:.1f} 小時的餘裕 |")
+    report_lines.append(f"| 資深員工利用率 | {strategy_summary['senior_utilization']*100:.1f}% | 資深員工工時使用效率 |")
+    report_lines.append(f"| 一般員工利用率 | {strategy_summary['junior_utilization']*100:.1f}% | 一般員工工時使用效率 |")
+    report_lines.append(f"| 整體利用率 | {strategy_summary['overall_utilization']*100:.1f}% | 整體工時使用效率 |")
+    report_lines.append(f"| 剩餘資深員工時間 | {strategy_summary['leftover_senior']:,} 分鐘 | 資深員工剩餘工作時間 |")
+    report_lines.append(f"| 剩餘一般員工時間 | {strategy_summary['leftover_junior']:,} 分鐘 | 一般員工剩餘工作時間 |")
+    total_remaining = strategy_summary['leftover_senior'] + strategy_summary['leftover_junior']
+    report_lines.append(f"| 總剩餘工時 | {total_remaining:,} 分鐘 | 約 {total_remaining/60:.1f} 小時的餘裕 |")
     
-    # === 目標達成分析 ===
-    meets_target = assigned_tasks >= MINIMUM_WORK_TARGET
-    target_completion = (assigned_tasks / MINIMUM_WORK_TARGET) * 100
+    # === 目標達成分析 === 使用策略管理器統一計算
+    target_completion = (assigned_tasks / strategy_summary['parameters']['minimum_work_target']) * 100
     
     report_lines.append("\n🎯 【目標達成分析】")
     report_lines.append("| 目標項目 | 數值 | 狀態 |")
     report_lines.append("|----------|-----:|:----:|")
-    report_lines.append(f"| 最低完成目標 | {MINIMUM_WORK_TARGET:,} 件 | 設定的最低要求 |")
+    report_lines.append(f"| 最低完成目標 | {strategy_summary['parameters']['minimum_work_target']:,} 件 | 設定的最低要求 |")
     report_lines.append(f"| 實際完成數量 | {assigned_tasks:,} 件 | 實際分配完成的工作 |")
-    report_lines.append(f"| 目標完成率 | {target_completion:.1f}% | {'✅ 超額達成' if meets_target else '❌ 未達標準'} |")
+    report_lines.append(f"| 目標完成率 | {target_completion:.1f}% | {'✅ 超額達成' if strategy_summary['meets_minimum'] else '❌ 未達標準'} |")
     
-    if meets_target:
-        excess = assigned_tasks - MINIMUM_WORK_TARGET
-        excess_rate = (excess / MINIMUM_WORK_TARGET) * 100
+    if strategy_summary['meets_minimum']:
+        excess = assigned_tasks - strategy_summary['parameters']['minimum_work_target']
+        excess_rate = (excess / strategy_summary['parameters']['minimum_work_target']) * 100
         report_lines.append(f"| 超額完成數量 | {excess:,} 件 | 超出目標的工作數量 |")
         report_lines.append(f"| 超額完成率 | {excess_rate:.1f}% | 相對於目標的超額比例 |")
     else:
-        shortage = MINIMUM_WORK_TARGET - assigned_tasks
-        shortage_rate = (shortage / MINIMUM_WORK_TARGET) * 100
+        shortage = strategy_summary['parameters']['minimum_work_target'] - assigned_tasks
+        shortage_rate = (shortage / strategy_summary['parameters']['minimum_work_target']) * 100
         report_lines.append(f"| 缺少完成數量 | {shortage:,} 件 | 未達到目標的工作數量 |")
         report_lines.append(f"| 缺口率 | {shortage_rate:.1f}% | 相對於目標的缺口比例 |")
     
@@ -228,14 +239,14 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     report_lines.append("\n📈 【性能評估與建議】")
     
     # 計算各種指標
-    high_priority_completion = priority_stats[1]['completion_rate']
-    resource_utilization = overall_utilization
-    workload_balance = 100 - (np.std(list(senior_workloads.values()) + list(junior_workloads.values())) / np.mean(list(senior_workloads.values()) + list(junior_workloads.values())) * 100)
+    high_priority_completion = priority_stats[1]['completion_rate'] if 1 in priority_stats else 0
+    resource_utilization = strategy_summary['overall_utilization'] * 100
+    workload_balance = 100 - (np.std(list(senior_workloads.values()) + list(junior_workloads.values())) / np.mean(list(senior_workloads.values()) + list(junior_workloads.values())) * 100) if (senior_workloads or junior_workloads) else 100
     
     report_lines.append("✅ 優點:")
     if high_priority_completion == 100:
         report_lines.append("   • 優先權1工作100%完成 - 關鍵任務得到妥善處理")
-    if meets_target:
+    if strategy_summary['meets_minimum']:
         report_lines.append(f"   • 超額完成工作目標 - 達成{target_completion:.1f}%的目標完成率")
     if resource_utilization >= 95:
         report_lines.append(f"   • 資源利用率極高 - {resource_utilization:.1f}%的工時使用效率")
@@ -249,7 +260,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         report_lines.append("     - 調整工作難度評估")
         report_lines.append("     - 優化分配算法")
     
-    if remaining_time < 60:  # 少於1小時
+    if total_remaining < 60:  # 少於1小時
         report_lines.append("   • 工作安排非常緊湊，建議預留更多緩衝時間")
     
     low_completion_priorities = [p for p, stats in priority_stats.items() if stats['completion_rate'] < 80]
@@ -262,30 +273,45 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         'total_tasks': total_tasks,
         'assigned_tasks': assigned_tasks,
         'assignment_rate': assignment_rate,
-        'meets_target': meets_target,
+        'meets_target': strategy_summary['meets_minimum'],
         'target_completion_rate': target_completion,
-        'overall_utilization': overall_utilization,
-        'senior_utilization': avg_senior_utilization,
-        'junior_utilization': avg_junior_utilization,
+        'overall_utilization': strategy_summary['overall_utilization'] * 100,
+        'senior_utilization': strategy_summary['senior_utilization'] * 100,
+        'junior_utilization': strategy_summary['junior_utilization'] * 100,
+        'leftover_senior': strategy_summary['leftover_senior'],
+        'leftover_junior': strategy_summary['leftover_junior'],
         'difficulty_stats': difficulty_stats,
         'priority_stats': priority_stats,
         'senior_workloads': senior_workloads,
-        'junior_workloads': junior_workloads
+        'junior_workloads': junior_workloads,
+        'strategy_summary': strategy_summary  # 添加完整的策略摘要
     }
     
     return summary_data, report_lines
 
-def generate_detailed_statistics():
-    """生成詳細統計分析"""
+def generate_detailed_statistics(work_data=None, employee_data=None, result_file=None):
+    """生成詳細統計分析
+    
+    Args:
+        work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
+        employee_data: 員工數據，如果為 None 則讀取本地 CSV
+        result_file: 結果文件路徑，如果為 None 則使用默認路徑
+    """
     
     # 讀取分配結果
-    result_file = get_result_file_path('result_with_assignments.csv')
-    
-    if not os.path.exists(result_file):
-        print(f"❌ 找不到分配結果檔案: {result_file}")
-        return None, None
-    
-    df = pd.read_csv(result_file)
+    if work_data is not None:
+        # 使用外部數據
+        df = work_data
+    else:
+        # 讀取本地文件
+        if result_file is None:
+            result_file = get_result_file_path('result_with_assignments.csv')
+        
+        if not os.path.exists(result_file):
+            print(f"❌ 找不到分配結果檔案: {result_file}")
+            return None, None
+        
+        df = pd.read_csv(result_file)
     
     # 基本統計
     total_tasks = len(df)
@@ -295,7 +321,10 @@ def generate_detailed_statistics():
     assignment_rate = (assigned_tasks / total_tasks) * 100
     
     # 生成報告內容
-    summary_data, report_lines = generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassigned_tasks, assignment_rate)
+    summary_data, report_lines = generate_report_content(
+        df, assigned_df, total_tasks, assigned_tasks, unassigned_tasks, assignment_rate,
+        work_data=work_data, employee_data=employee_data
+    )
     
     # 輸出到控制台
     for line in report_lines:

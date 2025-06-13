@@ -8,7 +8,7 @@ MD格式分析報告生成器
 import os
 import pandas as pd
 from datetime import datetime
-from config_params import MINIMUM_WORK_TARGET
+from config_params import MINIMUM_WORK_TARGET, SENIOR_TIME, JUNIOR_TIME
 from employee_manager import get_actual_employee_counts
 
 class MDReportGenerator:
@@ -23,11 +23,33 @@ class MDReportGenerator:
         if os.path.exists(result_file):
             self.report_data['df'] = pd.read_csv(result_file)
         
-        # 讀取人力需求分析
-        workforce_file = os.path.join(self.script_dir, "result/workforce_requirements_analysis.txt")
-        if os.path.exists(workforce_file):
-            with open(workforce_file, 'r', encoding='utf-8') as f:
-                self.report_data['workforce_analysis'] = f.read()
+        # 執行人力需求分析
+        try:
+            from direct_calculation import direct_workforce_calculation
+            import io
+            import sys
+            
+            # 捕獲 direct_workforce_calculation 的輸出
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = io.StringIO()
+            
+            # 執行人力需求分析
+            result = direct_workforce_calculation()
+            
+            # 恢復標準輸出
+            sys.stdout = old_stdout
+            
+            # 獲取輸出內容
+            analysis_output = captured_output.getvalue()
+            
+            if result and analysis_output:
+                self.report_data['workforce_analysis'] = {
+                    'output': analysis_output,
+                    'result': result
+                }
+        except Exception as e:
+            print(f"警告：無法執行人力需求分析：{e}")
+            self.report_data['workforce_analysis'] = None
         
         # 收集基本統計
         if 'df' in self.report_data:
@@ -111,6 +133,56 @@ class MDReportGenerator:
 - **一般員工數量：** {actual_junior_count} 人
 - **最低工作目標：** {MINIMUM_WORK_TARGET} 件
 - **每人日工時：** 8 小時 (480 分鐘)
+
+### 工作時間配置
+
+#### 資深員工完成時間 (分鐘)
+| 難度等級 | 完成時間 | 難度等級 | 完成時間 | 難度等級 | 完成時間 |
+|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|"""
+
+        # 添加資深員工時間配置表格
+        senior_time_items = list(SENIOR_TIME.items())
+        for i in range(0, len(senior_time_items), 3):
+            row_items = senior_time_items[i:i+3]
+            row = ""
+            for diff, time in row_items:
+                row += f"| 難度 {diff} | {time} 分鐘 "
+            # 補齊空格
+            while len(row_items) < 3:
+                row += "| - | - "
+                row_items.append(None)
+            row += "|"
+            md += f"""
+{row}"""
+
+        md += f"""
+
+#### 一般員工完成時間 (分鐘)
+| 難度等級 | 完成時間 | 難度等級 | 完成時間 | 難度等級 | 完成時間 |
+|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|"""
+
+        # 添加一般員工時間配置表格
+        junior_time_items = list(JUNIOR_TIME.items())
+        for i in range(0, len(junior_time_items), 3):
+            row_items = junior_time_items[i:i+3]
+            row = ""
+            for diff, time in row_items:
+                row += f"| 難度 {diff} | {time} 分鐘 "
+            # 補齊空格
+            while len(row_items) < 3:
+                row += "| - | - "
+                row_items.append(None)
+            row += "|"
+            md += f"""
+{row}"""
+
+        md += f"""
+
+#### 時間配置說明
+- **難度定義：** 1為最簡單（{SENIOR_TIME[1]}分鐘），{max(SENIOR_TIME.keys())}為最難（{SENIOR_TIME[max(SENIOR_TIME.keys())]}分鐘）
+- **效率比例：** 一般員工完成時間為資深員工的1.5倍
+- **低難度工作：** 難度6-9（適合一般員工優先處理）
+- **高難度工作：** 難度1-5（需要資深員工處理）
 
 ### 關鍵績效指標 (KPI)
 
@@ -273,98 +345,70 @@ class MDReportGenerator:
 ## 人力需求分析"""
 
         # 添加人力需求分析
-        if 'workforce_analysis' in self.report_data:
-            analysis = self.report_data['workforce_analysis']
+        if 'workforce_analysis' in self.report_data and self.report_data['workforce_analysis']:
+            analysis_data = self.report_data['workforce_analysis']
             
-            # 解析分析內容
-            lines = analysis.split('\n')
-            current_config = ""
-            recommended_config = ""
-            benefits = ""
-            
-            in_current = False
-            in_recommended = False
-            in_benefits = False
-            
-            for line in lines:
-                if "當前配置分析" in line:
-                    in_current = True
-                    in_recommended = False
-                    in_benefits = False
-                elif "推薦配置" in line:
-                    in_current = False
-                    in_recommended = True
-                    in_benefits = False
-                elif "效益分析" in line:
-                    in_current = False
-                    in_recommended = False
-                    in_benefits = True
-                elif line.strip() and not line.startswith('-----'):
-                    if in_current:
-                        current_config += line.strip() + "\n"
-                    elif in_recommended:
-                        recommended_config += line.strip() + "\n"
-                    elif in_benefits:
-                        benefits += line.strip() + "\n"
-            
-            if current_config:
+            if 'result' in analysis_data and analysis_data['result']:
+                result = analysis_data['result']
+                
+                # 計算調整後的預期完成工作數量
+                current_completed = self.report_data.get('stats', {}).get('assigned_tasks', 0)
+                target_gap = self.report_data.get('stats', {}).get('target_gap', 0)
+                expected_completed = current_completed + target_gap
+                
+                # 如果有額外的人力增加，可能會超過最低目標
+                additional_capacity_estimate = 0
+                if result.get('senior_add', 0) > 0:
+                    # 資深員工每天可處理約16件工作（480分鐘/30分鐘平均）
+                    additional_capacity_estimate += result.get('senior_add', 0) * 16
+                if result.get('junior_add', 0) > 0:
+                    # 一般員工每天可處理約12件工作（480分鐘/40分鐘平均）
+                    additional_capacity_estimate += result.get('junior_add', 0) * 12
+                
+                # 保守估計，只計算達成目標所需的工作量
+                final_expected = min(expected_completed, MINIMUM_WORK_TARGET + additional_capacity_estimate // 2)
+                
                 md += f"""
 
-### 當前配置分析
+### 當前狀況分析
+- **當前配置：** {actual_senior_count}資深 + {actual_junior_count}一般 = {actual_senior_count + actual_junior_count}人
+- **已完成工作：** {current_completed} 件
+- **目標要求：** {MINIMUM_WORK_TARGET} 件
+- **缺口：** {target_gap} 件
+
+### 推薦解決方案
+- **方案類型：** {result.get('type', '未知')}
+- **具體調整：**
+  - 資深員工：{actual_senior_count} → {actual_senior_count + result.get('senior_add', 0)} 人 (+{result.get('senior_add', 0)}人)
+  - 一般員工：{actual_junior_count} → {actual_junior_count + result.get('junior_add', 0)} 人 (+{result.get('junior_add', 0)}人)
+- **預期效果：** {result.get('description', '無描述')}
+- **預期完成工作：** {final_expected} 件（{'✅ ' if final_expected >= MINIMUM_WORK_TARGET else '⚠️ '}{'達成目標' if final_expected >= MINIMUM_WORK_TARGET else '仍未達標'}）
+- **成本影響：** {result.get('cost_factor', 0):.1f} 個成本單位
+
+### 實施建議
 """
-                # 解析當前配置內容並格式化為條列
-                config_lines = current_config.strip().split('\n')
-                for line in config_lines:
-                    line = line.strip()
-                    if line:
-                        if "配置:" in line:
-                            config_value = line.split("配置:")[-1].strip()
-                            md += f"- **配置：** {config_value}\n"
-                        elif "完成工作:" in line:
-                            work_value = line.split("完成工作:")[-1].strip()
-                            md += f"- **完成工作：** {work_value}\n"
-                        elif "目標:" in line:
-                            target_value = line.split("目標:")[-1].strip()
-                            md += f"- **目標：** {target_value}\n"
-                        elif "缺口:" in line:
-                            gap_value = line.split("缺口:")[-1].strip()
-                            md += f"- **缺口：** {gap_value}\n"
-                        elif "利用率:" in line:
-                            util_value = line.split("利用率:")[-1].strip()
-                            md += f"- **利用率：** {util_value}\n"
-            
-            if recommended_config:
-                md += f"""
-### 推薦配置
-"""
-                # 解析推薦配置內容並格式化為條列
-                config_lines = recommended_config.strip().split('\n')
-                for line in config_lines:
-                    line = line.strip()
-                    if line:
-                        if "配置:" in line:
-                            config_value = line.split("配置:")[-1].strip()
-                            md += f"- **配置：** {config_value}\n"
-                        elif "需要增加:" in line:
-                            add_value = line.split("需要增加:")[-1].strip()
-                            md += f"- **需要增加：** {add_value}\n"
-                        elif "預期完成:" in line:
-                            expect_value = line.split("預期完成:")[-1].strip()
-                            md += f"- **預期完成：** {expect_value}\n"
-                        elif "成本增加:" in line:
-                            cost_value = line.split("成本增加:")[-1].strip()
-                            md += f"- **成本增加：** {cost_value}\n"
                 
-            if benefits:
-                md += f"""
-### 效益分析
-"""
-                # 解析效益分析內容並格式化為條列
-                benefit_lines = benefits.strip().split('\n')
-                for line in benefit_lines:
-                    line = line.strip()
-                    if line:
-                        md += f"- {line}\n"
+                if result.get('senior_add', 0) > 0 or result.get('junior_add', 0) > 0:
+                    total_increase = result.get('senior_add', 0) + result.get('junior_add', 0)
+                    increase_percentage = (total_increase / (actual_senior_count + actual_junior_count)) * 100
+                    
+                    md += f"""- **人力增加幅度：** {increase_percentage:.1f}%
+- **配置文件修改：**
+  ```
+  SENIOR_WORKERS = {actual_senior_count + result.get('senior_add', 0)}  # 原 {actual_senior_count}
+  JUNIOR_WORKERS = {actual_junior_count + result.get('junior_add', 0)}  # 原 {actual_junior_count}
+  ```
+- **預期達成目標：** 300件最低工作要求
+- **資源配置：** 成本增加相對最小，資源配置合理"""
+                else:
+                    md += f"""- **結論：** 現有人力配置已足夠達成目標
+- **建議：** 優化工作分配策略，提升整體效率"""
+        else:
+            md += f"""
+
+### 人力需求分析
+- **狀態：** 分析數據不可用
+- **建議：** 請檢查系統配置或重新執行分析"""
 
         return md
 

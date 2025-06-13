@@ -8,9 +8,62 @@ except ImportError:
     get_actual_employee_counts = None
 
 # ===== 人力配置參數 =====
-SENIOR_WORKERS = 5           # 資深員工人數
-JUNIOR_WORKERS = 10          # 一般員工人數
-WORK_HOURS_PER_DAY = 8 * 60  # 每人每日工時(分鐘)
+# 預設值，如果無法讀取實際員工名單時使用
+DEFAULT_SENIOR_WORKERS = 5           # 預設資深員工人數
+DEFAULT_JUNIOR_WORKERS = 10          # 預設一般員工人數
+WORK_HOURS_PER_DAY = 8 * 60         # 每人每日工時(分鐘)
+
+# 動態獲取實際員工數量
+def get_dynamic_worker_counts(external_senior_count=None, external_junior_count=None):
+    """
+    動態獲取員工數量，優先順序：
+    1. 外部API傳入的參數
+    2. 從employee_list.csv讀取的實際數量
+    3. 預設配置值
+    
+    Args:
+        external_senior_count: API傳入的資深員工數量
+        external_junior_count: API傳入的一般員工數量
+    
+    Returns:
+        tuple: (senior_count, junior_count)
+    """
+    # 如果API有傳入參數，優先使用
+    if external_senior_count is not None and external_junior_count is not None:
+        return external_senior_count, external_junior_count
+    
+    # 嘗試從實際員工名單讀取
+    try:
+        # 嘗試使用全局已導入的函數或動態導入
+        try:
+            if 'get_actual_employee_counts' in globals() and get_actual_employee_counts is not None:
+                actual_senior_count, actual_junior_count = get_actual_employee_counts()
+            else:
+                from employee_manager import get_actual_employee_counts as get_counts
+                actual_senior_count, actual_junior_count = get_counts()
+                
+            # 如果只有部分API參數，混合使用
+            senior_count = external_senior_count if external_senior_count is not None else actual_senior_count
+            junior_count = external_junior_count if external_junior_count is not None else actual_junior_count
+            
+            return senior_count, junior_count
+        except ImportError:
+            # 無法讀取實際員工數量，使用預設值與API參數
+            senior_count = external_senior_count if external_senior_count is not None else DEFAULT_SENIOR_WORKERS
+            junior_count = external_junior_count if external_junior_count is not None else DEFAULT_JUNIOR_WORKERS
+            return senior_count, junior_count
+    except Exception:
+        # 任何其他錯誤，回退到預設值
+        senior_count = external_senior_count if external_senior_count is not None else DEFAULT_SENIOR_WORKERS
+        junior_count = external_junior_count if external_junior_count is not None else DEFAULT_JUNIOR_WORKERS
+        return senior_count, junior_count
+
+# 為了向後相容性，保留原有變數名稱，但現在它們會動態計算
+try:
+    SENIOR_WORKERS, JUNIOR_WORKERS = get_dynamic_worker_counts()
+except:
+    SENIOR_WORKERS = DEFAULT_SENIOR_WORKERS
+    JUNIOR_WORKERS = DEFAULT_JUNIOR_WORKERS
 
 # ===== 外部員工名單參數 =====
 # 外部員工名單JSON格式範例：
@@ -25,15 +78,15 @@ USE_EXTERNAL_WORKER_LIST = True  # 是否使用外部員工名單
 MINIMUM_WORK_TARGET = 300    # 每日最低工作完成目標
 
 # ===== 工作時間參數 =====
-# 資深員工各難度所需時間(分鐘)
+# 資深員工各難度所需時間(分鐘) - 難度1為最簡單，7為最難
 SENIOR_TIME = {
-    1: 60,  # 難度1：60分鐘
-    2: 50,  # 難度2：50分鐘  
-    3: 40,  # 難度3：40分鐘
+    1: 5,   # 難度1（最簡單）：5分鐘
+    2: 10,  # 難度2：10分鐘  
+    3: 20,  # 難度3：20分鐘
     4: 30,  # 難度4：30分鐘
-    5: 20,  # 難度5：20分鐘
-    6: 10,  # 難度6：10分鐘
-    7: 5    # 難度7：5分鐘
+    5: 40,  # 難度5：40分鐘
+    6: 50,  # 難度6：50分鐘
+    7: 60   # 難度7（最難）：60分鐘
 }
 
 # 一般員工需要1.5倍時間
@@ -45,9 +98,9 @@ MEDIUM_PRIORITY_LEVELS = [2, 3, 4, 5]  # 中優先權
 LOW_PRIORITY_LEVELS = [6]       # 低優先權（可延後處理）
 
 # ===== 難度分類 =====
-HIGH_DIFFICULTY_LEVELS = [1, 2, 3]     # 高難度工作
+LOW_DIFFICULTY_LEVELS = [1, 2, 3]      # 低難度工作（簡單）
 MEDIUM_DIFFICULTY_LEVELS = [4, 5]      # 中難度工作  
-LOW_DIFFICULTY_LEVELS = [6, 7]         # 低難度工作
+HIGH_DIFFICULTY_LEVELS = [6, 7]        # 高難度工作（複雜）
 
 # ===== 顯示參數 =====
 def print_config():
@@ -68,42 +121,34 @@ def print_config():
     print(f"   一般員工時間: {JUNIOR_TIME}")
     print("="*50)
 
-def get_runtime_config():
+def get_runtime_config(external_senior_count=None, external_junior_count=None):
     """
-    獲取運行時配置，包括實際員工數量
+    獲取運行時配置，支持外部參數
+    
+    Args:
+        external_senior_count: API傳入的資深員工數量
+        external_junior_count: API傳入的一般員工數量
     
     Returns:
         dict: 包含所有配置參數的字典
     """
-    try:
-        if get_actual_employee_counts is not None:
-            actual_senior_count, actual_junior_count = get_actual_employee_counts()
-        else:
-            from employee_manager import get_actual_employee_counts
-            actual_senior_count, actual_junior_count = get_actual_employee_counts()
-        
-        return {
-            'senior_workers': actual_senior_count,
-            'junior_workers': actual_junior_count,
-            'minimum_work_target': MINIMUM_WORK_TARGET,
-            'work_hours_per_day': WORK_HOURS_PER_DAY,
-            'senior_time': SENIOR_TIME,
-            'junior_time': JUNIOR_TIME,
-            'use_external_worker_list': USE_EXTERNAL_WORKER_LIST,
-            'external_worker_list_file': EXTERNAL_WORKER_LIST_FILE
+    # 使用動態員工數量計算
+    senior_count, junior_count = get_dynamic_worker_counts(external_senior_count, external_junior_count)
+    
+    return {
+        'senior_workers': senior_count,
+        'junior_workers': junior_count,
+        'minimum_work_target': MINIMUM_WORK_TARGET,
+        'work_hours_per_day': WORK_HOURS_PER_DAY,
+        'senior_time': SENIOR_TIME,
+        'junior_time': JUNIOR_TIME,
+        'use_external_worker_list': USE_EXTERNAL_WORKER_LIST,
+        'external_worker_list_file': EXTERNAL_WORKER_LIST_FILE,
+        'source': {
+            'senior_workers_source': 'external_api' if external_senior_count is not None else 'employee_list_csv',
+            'junior_workers_source': 'external_api' if external_junior_count is not None else 'employee_list_csv'
         }
-    except ImportError:
-        # 回退到預設值
-        return {
-            'senior_workers': SENIOR_WORKERS,
-            'junior_workers': JUNIOR_WORKERS,
-            'minimum_work_target': MINIMUM_WORK_TARGET,
-            'work_hours_per_day': WORK_HOURS_PER_DAY,
-            'senior_time': SENIOR_TIME,
-            'junior_time': JUNIOR_TIME,
-            'use_external_worker_list': USE_EXTERNAL_WORKER_LIST,
-            'external_worker_list_file': EXTERNAL_WORKER_LIST_FILE
-        }
+    }
 
 def print_runtime_config():
     """打印運行時配置信息"""

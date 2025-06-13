@@ -105,7 +105,7 @@ def advanced_optimal_strategy(df, senior_workers=None, junior_workers=None,
     
     # 第三階段：用剩餘時間完成更多工作，優先選擇最簡單的
     if completed_count < len(df):
-        remaining_work = df.iloc[completed_count:].sort_values('difficulty', ascending=False)
+        remaining_work = df.iloc[completed_count:].sort_values('difficulty', ascending=True)  # 從簡單到難（1->7）
         
         for _, row in remaining_work.iterrows():
             diff = row['difficulty']
@@ -222,14 +222,14 @@ def main():
     senior_mid_low_diff = sum(optimal_assignment.get(diff, [0, 0])[0] for diff in MEDIUM_DIFFICULTY_LEVELS + LOW_DIFFICULTY_LEVELS)
     
     print(f"   📋 資深員工 ({_senior_workers}人) 工作分配:")
-    print(f"     • 高難度工作 (1-3級): {senior_high_diff}件 ({senior_high_diff/total_senior_assigned*100:.1f}%)")
+    print(f"     • 高難度工作 (6-7級): {senior_high_diff}件 ({senior_high_diff/total_senior_assigned*100:.1f}%)")
     for diff in HIGH_DIFFICULTY_LEVELS:
         if diff in optimal_assignment and optimal_assignment[diff][0] > 0:
             time_per_diff = optimal_assignment[diff][0] * _senior_time[diff]
             print(f"       - 難度{diff}: {optimal_assignment[diff][0]}件 (預計{time_per_diff}分鐘)")
     
     if senior_mid_low_diff > 0:
-        print(f"     • 中低難度工作 (4-7級): {senior_mid_low_diff}件 ({senior_mid_low_diff/total_senior_assigned*100:.1f}%)")
+        print(f"     • 中低難度工作 (1-5級): {senior_mid_low_diff}件 ({senior_mid_low_diff/total_senior_assigned*100:.1f}%)")
         for diff in MEDIUM_DIFFICULTY_LEVELS + LOW_DIFFICULTY_LEVELS:
             if diff in optimal_assignment and optimal_assignment[diff][0] > 0:
                 time_per_diff = optimal_assignment[diff][0] * _senior_time[diff]
@@ -249,7 +249,7 @@ def main():
     print("     • 預期完成：優先權1工作100%，優先權2工作50%")
     
     print("\n   🕑 **下午時段 (13:00-17:00):**")
-    print("     • 資深員工：專攻高難度工作(1-3級)，協助處理優先權4工作")
+    print("     • 資深員工：專攻高難度工作(6-7級)，協助處理優先權4工作")
     print("     • 一般員工：大量處理優先權4工作，開始優先權5工作")
     print("     • 預期完成：達到300件基本目標")
     
@@ -300,7 +300,7 @@ def main():
         print(f"   • 資深員工處理能力：{senior_high_diff_capacity}件")
         print(f"   • 缺口：{shortage}件")
         print(f"   💡 **應對措施：**")
-        print(f"     - 緊急培訓2-3名一般員工處理難度3工作")
+        print(f"     - 緊急培訓2-3名一般員工處理難度5工作")
         print(f"     - 建立資深員工輪班制，延長工作時間")
         print(f"     - 考慮外包部分高難度工作")
     

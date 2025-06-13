@@ -43,10 +43,13 @@ import optimal_strategy_analysis
 import final_recommendation_report
 import update_assignment_results
 import detailed_global_statistics
+import traceback
+import glob
 
 # 導入人力需求計算模組
-from workforce_api import calculate_required_workforce, get_current_status
+# from workforce_api import calculate_required_workforce, get_current_status  # 不再使用遞增式計算
 from md_report_generator import generate_md_report
+from direct_calculation import direct_workforce_calculation
 
 # 導入員工管理模組
 from employee_manager import print_actual_employee_config, get_actual_employee_counts
@@ -151,7 +154,6 @@ class WorkAssignmentManager:
             
         except Exception as e:
             print(f"❌ JSON格式工作分配失敗: {e}")
-            import traceback
             traceback.print_exc()
             return False
     
@@ -179,118 +181,13 @@ class WorkAssignmentManager:
         print("\n🔧 第4步: 分析人力需求...")
         
         try:
-            # 獲取實際員工數量
-            actual_senior_count, actual_junior_count = get_actual_employee_counts()
-            
-            # 檢查當前狀態（使用實際員工數量）
-            status = get_current_status(
-                data_file=self.data_file,
-                senior_workers=actual_senior_count,
-                junior_workers=actual_junior_count
-            )
-            
-            if status['performance']['meets_target']:
-                print("✅ 當前配置已達成目標，無需增加人力")
-                return True
-            
-            print(f"📊 當前狀態分析:")
-            print(f"   配置: {status['configuration']['senior_workers']}資深 + {status['configuration']['junior_workers']}一般")
-            print(f"   完成: {status['performance']['completed_work']} 件")
-            print(f"   目標: {status['configuration']['target']} 件")
-            print(f"   缺口: {status['performance']['target_gap']} 件")
-            print(f"   利用率: {status['performance']['overall_utilization']*100:.1f}%")
-            
-            print(f"\n🔍 計算達標所需人力...")
-            
-            # 計算人力需求
-            result = calculate_required_workforce(
-                data_file=self.data_file,
-                current_senior=actual_senior_count,
-                current_junior=actual_junior_count,
-                strategy='cost_optimal',
-                verbose=False
-            )
-            
-            if result['success'] and result['meets_target']:
-                print(f"\n💡 人力需求分析結果:")
-                print(f"   推薦配置: {result['recommended_configuration']['senior_workers']}資深 + {result['recommended_configuration']['junior_workers']}一般")
-                print(f"   需要增加: +{result['workforce_changes']['senior_increase']}資深 + {result['workforce_changes']['junior_increase']}一般")
-                print(f"   預期完成: {result['recommended_configuration']['completed_work']} 件")
-                print(f"   成本增加: {result['cost_analysis']['cost_increase_percentage']:.1f}%")
-                
-                print(f"\n🛠️ 實施建議:")
-                print(f"   修改 config_params.py:")
-                changes = result['implementation']['config_changes']
-                print(f"   SENIOR_WORKERS = {changes['SENIOR_WORKERS']}  # 原 {status['configuration']['senior_workers']}")
-                print(f"   JUNIOR_WORKERS = {changes['JUNIOR_WORKERS']}  # 原 {status['configuration']['junior_workers']}")
-                
-                # 保存人力需求分析報告
-                self._save_workforce_analysis_report(result, status)
-                
-                return True
-            else:
-                print(f"❌ 無法計算出可行的人力需求方案")
-                return False
-                
+            print("🎯 執行直接人力需求計算分析...")
+            result = direct_workforce_calculation()
+            return True
         except Exception as e:
             print(f"❌ 人力需求分析失敗: {e}")
-            import traceback
             traceback.print_exc()
             return False
-    
-    def _save_workforce_analysis_report(self, result, status):
-        """保存人力需求分析報告"""
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            result_dir = os.path.join(script_dir, "result")
-            
-            # 確保result目錄存在
-            os.makedirs(result_dir, exist_ok=True)
-            
-            report_file = os.path.join(result_dir, "workforce_requirements_analysis.txt")
-            
-            with open(report_file, 'w', encoding='utf-8') as f:
-                f.write("人力需求分析報告\n")
-                f.write("=" * 60 + "\n")
-                f.write(f"生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                
-                f.write("當前配置分析:\n")
-                f.write("-" * 30 + "\n")
-                f.write(f"配置: {status['configuration']['senior_workers']}資深 + {status['configuration']['junior_workers']}一般\n")
-                f.write(f"完成工作: {status['performance']['completed_work']} 件\n")
-                f.write(f"目標: {status['configuration']['target']} 件\n")
-                f.write(f"缺口: {status['performance']['target_gap']} 件\n")
-                f.write(f"利用率: {status['performance']['overall_utilization']*100:.1f}%\n\n")
-                
-                f.write("推薦配置:\n")
-                f.write("-" * 30 + "\n")
-                f.write(f"配置: {result['recommended_configuration']['senior_workers']}資深 + {result['recommended_configuration']['junior_workers']}一般\n")
-                f.write(f"需要增加: +{result['workforce_changes']['senior_increase']}資深 + {result['workforce_changes']['junior_increase']}一般\n")
-                f.write(f"預期完成: {result['recommended_configuration']['completed_work']} 件\n")
-                f.write(f"成本增加: {result['cost_analysis']['cost_increase_percentage']:.1f}%\n\n")
-                
-                f.write("實施建議:\n")
-                f.write("-" * 30 + "\n")
-                changes = result['implementation']['config_changes']
-                f.write(f"修改 config_params.py:\n")
-                f.write(f"SENIOR_WORKERS = {changes['SENIOR_WORKERS']}  # 原 {status['configuration']['senior_workers']}\n")
-                f.write(f"JUNIOR_WORKERS = {changes['JUNIOR_WORKERS']}  # 原 {status['configuration']['junior_workers']}\n\n")
-                
-                f.write("效益分析:\n")
-                f.write("-" * 30 + "\n")
-                # 修正計算邏輯：工作完成提升 = 推薦配置完成數 - 當前完成數
-                work_improvement = result['recommended_configuration']['completed_work'] - status['performance']['completed_work']
-                total_people_added = result['workforce_changes']['senior_increase'] + result['workforce_changes']['junior_increase']
-                roi = work_improvement / total_people_added if total_people_added > 0 else 0
-                
-                f.write(f"工作完成提升: +{total_people_added}人 → +{work_improvement}件\n")
-                f.write(f"目標達成率: 從 {status['performance']['completed_work']/status['configuration']['target']*100:.1f}% 提升到 100%+\n")
-                f.write(f"人力投資回報: {roi:.1f} 件/人\n")
-            
-            print(f"✅ 人力需求分析報告已保存: {report_file}")
-            
-        except Exception as e:
-            print(f"⚠️ 保存人力需求分析報告失敗: {e}")
     
     def generate_md_report(self):
         """生成MD格式綜合分析報告"""

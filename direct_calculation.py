@@ -179,12 +179,12 @@ def direct_workforce_calculation():
     remaining_gap = current_gap
     
     # 按難度優先級分配剩餘時間（簡單工作給一般員工，複雜工作給資深員工）
-    for diff in sorted(difficulty_dist.keys(), reverse=True):  # 從高難度開始
+    for diff in sorted(difficulty_dist.keys(), reverse=True):  # 從高難度開始（7->1）
         count = difficulty_dist[diff]
         senior_time_per_task = SENIOR_TIME[diff]
         junior_time_per_task = JUNIOR_TIME[diff]
         
-        if diff <= 3:  # 高難度工作優先給資深員工
+        if diff >= 6:  # 高難度工作(6-7級)優先給資深員工
             tasks_possible_by_senior = min(count, remaining_senior_capacity // senior_time_per_task)
             work_by_leftover += tasks_possible_by_senior
             remaining_senior_capacity -= tasks_possible_by_senior * senior_time_per_task
@@ -196,7 +196,7 @@ def direct_workforce_calculation():
                 work_by_leftover += tasks_possible_by_junior
                 remaining_junior_capacity -= tasks_possible_by_junior * junior_time_per_task
                 remaining_gap -= tasks_possible_by_junior
-        else:  # 低難度工作優先給一般員工
+        else:  # 低難度工作(1-5級)優先給一般員工
             tasks_possible_by_junior = min(count, remaining_junior_capacity // junior_time_per_task)
             work_by_leftover += tasks_possible_by_junior
             remaining_junior_capacity -= tasks_possible_by_junior * junior_time_per_task
@@ -305,8 +305,8 @@ def direct_workforce_calculation():
         
         print(f"\n   🔧 **config_params.py 修改建議：**")
         print(f"   ```python")
-        print(f"   SENIOR_WORKERS = {SENIOR_WORKERS + recommended['senior_add']}  # 原 {SENIOR_WORKERS}")
-        print(f"   JUNIOR_WORKERS = {JUNIOR_WORKERS + recommended['junior_add']}  # 原 {JUNIOR_WORKERS}")
+        print(f"   SENIOR_WORKERS = {actual_senior_count + recommended['senior_add']}  # 原 {actual_senior_count}")
+        print(f"   JUNIOR_WORKERS = {actual_junior_count + recommended['junior_add']}  # 原 {actual_junior_count}")
         print(f"   ```")
     else:
         print(f"\n   ✅ **結論：現有人力配置已足夠達成目標！**")

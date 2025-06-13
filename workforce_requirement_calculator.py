@@ -171,14 +171,14 @@ def calculate_workforce_requirements(df):
     # 方案一：只增加一般員工（擴大範圍）
     print(f"\n💡 方案一：只增加一般員工")
     for additional_junior in range(1, 11):  # 增加到10人
-        new_junior = JUNIOR_WORKERS + additional_junior
-        result = simulate_workforce_scenario(SENIOR_WORKERS, new_junior, df)
+        new_junior = actual_junior_count + additional_junior
+        result = simulate_workforce_scenario(actual_senior_count, new_junior, df)
         
-        cost_increase = (additional_junior / (SENIOR_WORKERS + JUNIOR_WORKERS)) * 100
+        cost_increase = (additional_junior / (actual_senior_count + actual_junior_count)) * 100
         
         scenarios.append({
             'name': f'增加{additional_junior}名一般員工',
-            'senior': SENIOR_WORKERS,
+            'senior': actual_senior_count,
             'junior': new_junior,
             'additional_cost': cost_increase,
             'completed': result['total_completed'],
@@ -196,15 +196,15 @@ def calculate_workforce_requirements(df):
     # 方案二：只增加資深員工（擴大範圍）
     print(f"\n💡 方案二：只增加資深員工")
     for additional_senior in range(1, 8):  # 增加到7人
-        new_senior = SENIOR_WORKERS + additional_senior
-        result = simulate_workforce_scenario(new_senior, JUNIOR_WORKERS, df)
+        new_senior = actual_senior_count + additional_senior
+        result = simulate_workforce_scenario(new_senior, actual_junior_count, df)
         
-        cost_increase = (additional_senior * 1.5 / (SENIOR_WORKERS + JUNIOR_WORKERS)) * 100
+        cost_increase = (additional_senior * 1.5 / (actual_senior_count + actual_junior_count)) * 100
         
         scenarios.append({
             'name': f'增加{additional_senior}名資深員工',
             'senior': new_senior,
-            'junior': JUNIOR_WORKERS,
+            'junior': actual_junior_count,
             'additional_cost': cost_increase,
             'completed': result['total_completed'],
             'meets_target': result['meets_target'],
@@ -229,11 +229,11 @@ def calculate_workforce_requirements(df):
     ]
     
     for add_senior, add_junior in mixed_scenarios:
-        new_senior = SENIOR_WORKERS + add_senior
-        new_junior = JUNIOR_WORKERS + add_junior
+        new_senior = actual_senior_count + add_senior
+        new_junior = actual_junior_count + add_junior
         result = simulate_workforce_scenario(new_senior, new_junior, df)
         
-        cost_increase = ((add_senior * 1.5 + add_junior) / (SENIOR_WORKERS + JUNIOR_WORKERS)) * 100
+        cost_increase = ((add_senior * 1.5 + add_junior) / (actual_senior_count + actual_junior_count)) * 100
         
         scenarios.append({
             'name': f'增加{add_senior}資深+{add_junior}一般',
@@ -340,19 +340,19 @@ def calculate_workforce_requirements(df):
     
     print(f"\n   🔧 **config_params.py 修改建議：**")
     print(f"   ```python")
-    print(f"   SENIOR_WORKERS = {most_balanced['senior']}  # 原 {SENIOR_WORKERS}")
-    print(f"   JUNIOR_WORKERS = {most_balanced['junior']}  # 原 {JUNIOR_WORKERS}")
+    print(f"   SENIOR_WORKERS = {most_balanced['senior']}  # 原 {actual_senior_count}")
+    print(f"   JUNIOR_WORKERS = {most_balanced['junior']}  # 原 {actual_junior_count}")
     print(f"   ```")
     
     # 添加分階段實施建議
     print(f"\n   📅 **分階段實施建議：**")
     
-    total_increase = (most_balanced['senior'] - SENIOR_WORKERS) + (most_balanced['junior'] - JUNIOR_WORKERS)
+    total_increase = (most_balanced['senior'] - actual_senior_count) + (most_balanced['junior'] - actual_junior_count)
     if total_increase <= 3:
         print(f"   階段一：一次性增加所有人力（總共+{total_increase}人）")
     else:
-        senior_increase = most_balanced['senior'] - SENIOR_WORKERS  
-        junior_increase = most_balanced['junior'] - JUNIOR_WORKERS
+        senior_increase = most_balanced['senior'] - actual_senior_count  
+        junior_increase = most_balanced['junior'] - actual_junior_count
         
         print(f"   階段一：優先增加{min(2, senior_increase)}名資深員工和{min(3, junior_increase)}名一般員工")
         if senior_increase > 2 or junior_increase > 3:

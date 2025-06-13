@@ -21,229 +21,186 @@ import config_params
 from config_params import EXTERNAL_WORKER_LIST_FILE, USE_EXTERNAL_WORKER_LIST, SENIOR_WORKERS, JUNIOR_WORKERS
 
 class EmployeeManager:
-    """員工管理器"""
+    """員工管理器 - 處理員工清單的載入、轉換和管理"""
     
-    def __init__(self, csv_file_path: str = None):
-        """初始化員工管理器
+    def __init__(self):
+        """初始化員工管理器"""
+        self.employee_df = None
+        self.is_loaded = False
+        
+    def load_employee_list_from_csv(self, csv_file=None):
+        """
+        從CSV檔案載入員工清單
         
         Args:
-            csv_file_path: CSV檔案路徑，如果為None則使用config中的預設路徑
-        """
-        if csv_file_path is None:
-            # 使用相對於腳本目錄的路徑
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            csv_file_path = os.path.join(script_dir, EXTERNAL_WORKER_LIST_FILE)
-        
-        self.csv_file_path = csv_file_path
-        self.employee_data = None
-    
-    def load_employee_list_from_csv(self) -> Dict[str, List[str]]:
-        """從CSV檔案讀取員工名單
+            csv_file (str, optional): CSV檔案路徑，預設使用配置中的路徑
         
         Returns:
-            Dict包含senior_workers和junior_workers的列表
+            bool: 載入是否成功
         """
         try:
-            if not os.path.exists(self.csv_file_path):
-                raise FileNotFoundError(f"找不到員工名單檔案: {self.csv_file_path}")
+            if csv_file is None:
+                csv_file = EXTERNAL_WORKER_LIST_FILE
             
-            df = pd.read_csv(self.csv_file_path, encoding='utf-8')
+            if not os.path.exists(csv_file):
+                raise FileNotFoundError(f"找不到員工清單檔案: {csv_file}")
             
-            # 驗證必要的欄位
-            required_columns = ['name', 'type']
-            for col in required_columns:
-                if col not in df.columns:
-                    raise ValueError(f"CSV檔案缺少必要欄位: {col}")
+            # 讀取CSV檔案
+            self.employee_df = pd.read_csv(csv_file)
             
-            # 分離資深員工和一般員工
-            senior_workers = df[df['type'].str.upper() == 'SENIOR']['name'].tolist()
-            junior_workers = df[df['type'].str.upper() == 'JUNIOR']['name'].tolist()
+            # 驗證必要欄位
+            required_columns = ['id', 'type']
+            missing_columns = [col for col in required_columns if col not in self.employee_df.columns]
             
-            self.employee_data = {
-                'senior_workers': senior_workers,
-                'junior_workers': junior_workers
-            }
+            if missing_columns:
+                raise ValueError(f"員工清單檔案缺少必要欄位: {missing_columns}")
             
-            print(f"✅ 成功讀取員工名單:")
-            print(f"   資深員工: {len(senior_workers)} 人")
-            print(f"   一般員工: {len(junior_workers)} 人")
+            # 驗證員工類型
+            valid_types = ['SENIOR', 'JUNIOR']
+            invalid_types = self.employee_df[~self.employee_df['type'].isin(valid_types)]
             
-            return self.employee_data
+            if not invalid_types.empty:
+                raise ValueError(f"發現無效的員工類型: {invalid_types['type'].unique()}")
+            
+            # 檢查是否有重複的ID
+            duplicate_ids = self.employee_df[self.employee_df.duplicated(subset=['id'])]
+            if not duplicate_ids.empty:
+                raise ValueError(f"發現重複的員工ID: {duplicate_ids['id'].tolist()}")
+            
+            self.is_loaded = True
+            
+            # 統計載入結果
+            senior_count = len(self.employee_df[self.employee_df['type'] == 'SENIOR'])
+            junior_count = len(self.employee_df[self.employee_df['type'] == 'JUNIOR'])
+            
+            print(f"✅ 員工清單載入成功: 資深員工 {senior_count} 人, 一般員工 {junior_count} 人")
+            return True
             
         except Exception as e:
-            print(f"❌ 讀取員工名單失敗: {e}")
-            raise
+            print(f"❌ 員工清單載入失敗: {str(e)}")
+            self.is_loaded = False
+            return False
     
-    def get_employee_json(self) -> str:
-        """取得員工名單的JSON格式
+    def get_employee_dict(self):
+        """
+        取得員工字典格式（用於向後兼容）
         
         Returns:
-            JSON字符串格式的員工名單
+            dict: 包含senior_workers和junior_workers的字典
         """
-        if self.employee_data is None:
-            self.load_employee_list_from_csv()
+        if not self.is_loaded or self.employee_df is None:
+            raise RuntimeError("員工清單尚未載入，請先執行 load_employee_list_from_csv()")
         
-        return json.dumps(self.employee_data, ensure_ascii=False, indent=2)
+        # 分離資深和一般員工，使用ID作為員工標識
+        senior_employees = self.employee_df[self.employee_df['type'] == 'SENIOR']['id'].tolist()
+        junior_employees = self.employee_df[self.employee_df['type'] == 'JUNIOR']['id'].tolist()
+        
+        return {
+            'senior_workers': senior_employees,
+            'junior_workers': junior_employees
+        }
     
-    def get_employee_dict(self) -> Dict[str, List[str]]:
-        """取得員工名單的字典格式
+    def get_employee_list_json(self):
+        """
+        取得JSON格式的員工清單
         
         Returns:
-            包含員工名單的字典
+            str: JSON格式的員工清單
         """
-        if self.employee_data is None:
-            self.load_employee_list_from_csv()
+        if not self.is_loaded or self.employee_df is None:
+            raise RuntimeError("員工清單尚未載入，請先執行 load_employee_list_from_csv()")
         
-        return self.employee_data
+        # 轉換為字典列表
+        employee_list = []
+        for _, row in self.employee_df.iterrows():
+            employee_list.append({
+                'id': row['id'],
+                'type': row['type']
+            })
+        
+        return json.dumps(employee_list, ensure_ascii=False, indent=2)
     
-    def validate_employee_counts(self) -> Tuple[bool, str]:
-        """驗證員工數量和格式
+    def save_employee_list_json(self, output_file='employee_list.json'):
+        """
+        將員工清單儲存為JSON檔案
+        
+        Args:
+            output_file (str): 輸出檔案路徑
         
         Returns:
-            (是否有效, 驗證訊息)
+            bool: 儲存是否成功
         """
-        if self.employee_data is None:
-            self.load_employee_list_from_csv()
-        
-        senior_count = len(self.employee_data['senior_workers'])
-        junior_count = len(self.employee_data['junior_workers'])
-        
-        # 基本驗證：至少要有員工
-        if senior_count == 0 and junior_count == 0:
-            return False, "員工名單為空，至少需要一名員工"
-        
-        # 提供信息性驗證結果，不再強制要求符合config參數
-        message = f"員工名單驗證完成 - 資深員工: {senior_count}人, 一般員工: {junior_count}人, 總計: {senior_count + junior_count}人"
-        
-        # 如果與config參數不符，給予提示但不判為錯誤
-        if senior_count != SENIOR_WORKERS or junior_count != JUNIOR_WORKERS:
-            message += f" (注意: config中設定為資深{SENIOR_WORKERS}人/一般{JUNIOR_WORKERS}人，將以實際名單為準)"
-        
-        return True, message
+        try:
+            json_content = self.get_employee_list_json()
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(json_content)
+            
+            print(f"✅ 員工清單JSON已儲存至: {output_file}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 儲存員工清單JSON失敗: {str(e)}")
+            return False
     
-    def get_employee_counts(self) -> Tuple[int, int]:
-        """取得員工數量
+    def get_employee_stats(self):
+        """
+        取得員工統計資訊
         
         Returns:
-            (資深員工數量, 一般員工數量)
+            dict: 員工統計資訊
         """
-        if self.employee_data is None:
-            self.load_employee_list_from_csv()
+        if not self.is_loaded or self.employee_df is None:
+            raise RuntimeError("員工清單尚未載入，請先執行 load_employee_list_from_csv()")
         
-        return len(self.employee_data['senior_workers']), len(self.employee_data['junior_workers'])
-    
-    def get_worker_lists(self) -> Tuple[List[str], List[str]]:
-        """取得員工名單列表
+        senior_count = len(self.employee_df[self.employee_df['type'] == 'SENIOR'])
+        junior_count = len(self.employee_df[self.employee_df['type'] == 'JUNIOR'])
+        total_count = len(self.employee_df)
         
-        Returns:
-            (資深員工列表, 一般員工列表)
-        """
-        if self.employee_data is None:
-            self.load_employee_list_from_csv()
-        
-        return (self.employee_data['senior_workers'], 
-                self.employee_data['junior_workers'])
+        return {
+            'total_employees': total_count,
+            'senior_employees': senior_count,
+            'junior_employees': junior_count,
+            'senior_percentage': round((senior_count / total_count) * 100, 2) if total_count > 0 else 0,
+            'junior_percentage': round((junior_count / total_count) * 100, 2) if total_count > 0 else 0
+        }
 
-def generate_test_employee_csv(output_path: str = None) -> str:
-    """生成測試用的員工名單CSV檔案
-    
-    Args:
-        output_path: 輸出檔案路徑，如果為None則使用預設路徑
-    
-    Returns:
-        生成的檔案路徑
+def load_external_employee_list():
     """
-    if output_path is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        output_path = os.path.join(script_dir, EXTERNAL_WORKER_LIST_FILE)
-    
-    # 生成測試員工名單
-    test_employees = []
-    
-    # 資深員工 - 使用真實姓名
-    senior_names = ["陈明华", "李建国", "王志强", "张雅琴", "刘德华"]
-    for i, name in enumerate(senior_names[:SENIOR_WORKERS]):
-        test_employees.append({
-            'id': f"S{i+1:03d}",
-            'name': name,
-            'type': 'SENIOR',
-            'department': '技術部',
-            'experience_years': 5 + i,
-            'specialization': ['數據分析', '系統設計', '架構規劃', '技術領導', '專案管理'][i % 5]
-        })
-    
-    # 一般員工 - 使用真實姓名
-    junior_names = ["黄小敏", "周文杰", "吴晓东", "郑雨晴", "刘思远", "宋嘉欣", "杨永康", "朱佳怡", "许志华", "何雅婷"]
-    for i, name in enumerate(junior_names[:JUNIOR_WORKERS]):
-        test_employees.append({
-            'id': f"J{i+1:03d}",
-            'name': name,
-            'type': 'JUNIOR',
-            'department': '操作部',
-            'experience_years': 1 + (i % 3),
-            'specialization': ['數據處理', '文檔整理', '基礎分析', '品質控制', '客戶服務'][i % 5]
-        })
-    
-    # 創建DataFrame並保存
-    df = pd.DataFrame(test_employees)
-    df.to_csv(output_path, index=False, encoding='utf-8')
-    
-    print(f"✅ 測試員工名單CSV檔案已生成: {output_path}")
-    print(f"   資深員工: {len([name for name in senior_names[:SENIOR_WORKERS]])} 人")
-    print(f"   一般員工: {len([name for name in junior_names[:JUNIOR_WORKERS]])} 人")
-    print(f"   總計: {len(test_employees)} 人")
-    
-    return output_path
-
-def load_external_employee_list() -> Tuple[List[str], List[str]]:
-    """載入外部員工名單
+    載入外部員工清單的便利函數
     
     Returns:
-        (資深員工列表, 一般員工列表)
+        tuple: (senior_workers_list, junior_workers_list)
     """
     if not USE_EXTERNAL_WORKER_LIST:
-        # 使用預設員工名單
-        senior_workers = [f"SENIOR_WORKER_{i+1}" for i in range(SENIOR_WORKERS)]
-        junior_workers = [f"JUNIOR_WORKER_{i+1}" for i in range(JUNIOR_WORKERS)]
+        # 使用配置檔中的預設員工數量，生成ID格式
+        senior_workers = [f"senior.worker.{i+1}" for i in range(SENIOR_WORKERS)]
+        junior_workers = [f"junior.worker.{i+1}" for i in range(JUNIOR_WORKERS)]
         return senior_workers, junior_workers
     
-    # 使用外部員工名單
-    manager = EmployeeManager()
-    
-    # 驗證員工數量
-    is_valid, message = manager.validate_employee_counts()
-    if not is_valid:
-        print(f"⚠️ 員工數量驗證失敗: {message}")
-        print("🔄 回退使用預設員工名單")
-        senior_workers = [f"SENIOR_WORKER_{i+1}" for i in range(SENIOR_WORKERS)]
-        junior_workers = [f"JUNIOR_WORKER_{i+1}" for i in range(JUNIOR_WORKERS)]
+    try:
+        manager = EmployeeManager()
+        if manager.load_employee_list_from_csv():
+            employee_dict = manager.get_employee_dict()
+            return employee_dict['senior_workers'], employee_dict['junior_workers']
+        else:
+            raise Exception("無法載入員工清單")
+    except Exception as e:
+        print(f"❌ 載入外部員工清單失敗，使用預設配置: {e}")
+        # 使用配置檔中的預設員工數量，生成ID格式
+        senior_workers = [f"senior.worker.{i+1}" for i in range(SENIOR_WORKERS)]
+        junior_workers = [f"junior.worker.{i+1}" for i in range(JUNIOR_WORKERS)]
         return senior_workers, junior_workers
-    
-    return manager.get_worker_lists()
 
-def main():
-    """主函數 - 用於測試和示範"""
-    print("=== 員工管理模組測試 ===")
-    
-    # 生成測試CSV檔案
-    csv_path = generate_test_employee_csv()
-    
-    # 測試讀取功能
-    manager = EmployeeManager(csv_path)
-    
-    # 顯示JSON格式
-    print(f"\n📄 員工名單JSON格式:")
-    print(manager.get_employee_json())
-    
-    # 驗證員工數量
-    is_valid, message = manager.validate_employee_counts()
-    print(f"\n✅ 驗證結果: {message}")
-    
-    # 測試外部員工名單載入
-    print(f"\n🔄 測試外部員工名單載入:")
-    senior_list, junior_list = load_external_employee_list()
-    print(f"   資深員工: {senior_list}")
-    print(f"   一般員工: {junior_list}")
+def print_actual_employee_config():
+    """
+    印出實際員工配置的統一函數
+    """
+    try:
+        senior_count, junior_count = get_actual_employee_counts()
+        print(f"📊 實際員工配置: {senior_count}資深 + {junior_count}一般 = {senior_count + junior_count}人")
+    except Exception as e:
+        print(f"❌ 無法取得員工配置: {e}")
 
 def get_actual_employee_counts():
     """
@@ -261,13 +218,67 @@ def get_actual_employee_counts():
         import config_params
         return config_params.SENIOR_WORKERS, config_params.JUNIOR_WORKERS
 
-def print_actual_employee_config():
+def get_runtime_config():
     """
-    打印實際員工配置的統一函數
+    獲取運行時配置，包括實際員工數量
+    
+    Returns:
+        dict: 包含所有配置參數的字典
     """
-    actual_senior_count, actual_junior_count = get_actual_employee_counts()
-    print(f"👥 員工配置: {actual_senior_count}名資深員工 + {actual_junior_count}名一般員工")
-    return actual_senior_count, actual_junior_count
+    try:
+        actual_senior_count, actual_junior_count = get_actual_employee_counts()
+        
+        return {
+            'senior_workers': actual_senior_count,
+            'junior_workers': actual_junior_count,
+            'total_workers': actual_senior_count + actual_junior_count,
+            'work_hours_per_day': config_params.WORK_HOURS_PER_DAY,
+            'minimum_work_target': config_params.MINIMUM_WORK_TARGET,
+            'senior_time': config_params.SENIOR_TIME,
+            'junior_time': config_params.JUNIOR_TIME,
+            'use_external_worker_list': config_params.USE_EXTERNAL_WORKER_LIST,
+            'external_worker_list_file': config_params.EXTERNAL_WORKER_LIST_FILE
+        }
+    except Exception as e:
+        print(f"❌ 取得運行時配置失敗: {e}")
+        return {
+            'senior_workers': config_params.SENIOR_WORKERS,
+            'junior_workers': config_params.JUNIOR_WORKERS,
+            'total_workers': config_params.SENIOR_WORKERS + config_params.JUNIOR_WORKERS,
+            'work_hours_per_day': config_params.WORK_HOURS_PER_DAY,
+            'minimum_work_target': config_params.MINIMUM_WORK_TARGET,
+            'senior_time': config_params.SENIOR_TIME,
+            'junior_time': config_params.JUNIOR_TIME,
+            'use_external_worker_list': config_params.USE_EXTERNAL_WORKER_LIST,
+            'external_worker_list_file': config_params.EXTERNAL_WORKER_LIST_FILE
+        }
+
+def main():
+    """主函數 - 用於測試和示範"""
+    print("=== 員工管理模組測試 ===")
+    
+    # 測試讀取功能
+    manager = EmployeeManager()
+    
+    if manager.load_employee_list_from_csv():
+        # 顯示JSON格式
+        print(f"\n📄 員工清單JSON格式:")
+        print(manager.get_employee_list_json())
+        
+        # 顯示統計資訊
+        stats = manager.get_employee_stats()
+        print(f"\n📊 員工統計:")
+        print(f"   總員工數: {stats['total_employees']}")
+        print(f"   資深員工: {stats['senior_employees']} ({stats['senior_percentage']}%)")
+        print(f"   一般員工: {stats['junior_employees']} ({stats['junior_percentage']}%)")
+        
+        # 測試外部員工名單載入
+        print(f"\n🔄 測試外部員工名單載入:")
+        senior_list, junior_list = load_external_employee_list()
+        print(f"   資深員工: {senior_list}")
+        print(f"   一般員工: {junior_list}")
+    else:
+        print("❌ 員工清單載入失敗")
 
 if __name__ == "__main__":
     main() 
