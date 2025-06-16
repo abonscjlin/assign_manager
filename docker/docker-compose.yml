@@ -1,0 +1,47 @@
+services:
+  assign-manager-api:
+    # 使用當前目錄的Dockerfile構建映像
+    build: .
+    
+    # 容器名稱
+    container_name: assign-manager-api
+    
+    # 端口映射：本機7777端口 -> 容器7777端口
+    ports:
+      - "7777:7777"
+    
+    # 目錄掛載：將專用的docker目錄掛載到容器對應位置
+    volumes:
+      - ~/docker/assign_manager/result:/app/result
+      - ~/docker/assign_manager/employee_list.csv:/app/employee_list.csv:ro
+      - ~/docker/assign_manager/result.csv:/app/result.csv:ro
+    
+    # 環境變數
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Taipei
+      - REPO_URL=https://github.com/abonscjlin/assign_manager.git
+    
+    # 重啟策略
+    restart: unless-stopped
+    
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7777/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 日誌配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 可選：創建named volume用於數據持久化
+volumes:
+  assign_manager_data:
+    driver: local 
