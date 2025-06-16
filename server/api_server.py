@@ -40,6 +40,80 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)  # 允許跨域請求
 
+def create_date_result_directory():
+    """創建按日期分組的結果目錄"""
+    today = datetime.now().strftime("%Y%m%d")
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    date_result_dir = os.path.join(script_dir, "result", today)
+    os.makedirs(date_result_dir, exist_ok=True)
+    return date_result_dir
+
+def generate_reports_for_api(work_data, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir):
+    """生成完整的分析報告（重用main_manager邏輯）"""
+    try:
+        # 導入所需模組
+        import detailed_global_statistics
+        import final_recommendation_report  
+        import direct_calculation
+        from md_report_generator import generate_md_report
+        
+        # 生成詳細統計報告
+        stats, report_lines = detailed_global_statistics.generate_detailed_statistics(
+            work_data=work_data, 
+            employee_data=employee_data
+        )
+        
+        if stats and report_lines:
+            # 保存詳細統計報告
+            report_file = os.path.join(date_result_dir, 'detailed_statistics_report.txt')
+            with open(report_file, 'w', encoding='utf-8') as f:
+                for line in report_lines:
+                    f.write(line + '\n')
+            logger.info(f"詳細統計報告已保存到: {report_file}")
+        
+        # 生成最終建議報告（需要先保存結果到臨時文件）
+        temp_result_file = os.path.join(date_result_dir, 'temp_result.csv')
+        result_df.to_csv(temp_result_file, index=False, encoding='utf-8')
+        
+        # 切換工作目錄以使用現有的報告生成邏輯
+        original_cwd = os.getcwd()
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        os.chdir(script_dir)
+        
+        try:
+            # 生成人力需求分析
+            result = direct_calculation.direct_workforce_calculation()
+            if result:
+                # 移動生成的文件到日期目錄
+                source_file = os.path.join(script_dir, "result", "workforce_requirements_analysis.txt")
+                if os.path.exists(source_file):
+                    dest_file = os.path.join(date_result_dir, "workforce_requirements_analysis.txt")
+                    import shutil
+                    shutil.move(source_file, dest_file)
+                    logger.info(f"人力需求分析報告已保存到: {dest_file}")
+            
+            # 生成MD格式報告
+            md_file_path = generate_md_report(script_dir)
+            if md_file_path:
+                # 移動MD報告到日期目錄
+                import shutil
+                dest_md_file = os.path.join(date_result_dir, os.path.basename(md_file_path))
+                shutil.move(md_file_path, dest_md_file)
+                logger.info(f"MD格式報告已保存到: {dest_md_file}")
+            
+        finally:
+            os.chdir(original_cwd)
+            # 清理臨時文件
+            if os.path.exists(temp_result_file):
+                os.remove(temp_result_file)
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"報告生成失敗: {str(e)}")
+        logger.error(traceback.format_exc())
+        return False
+
 class WorkAssignmentAPI:
     """工作分配API處理器"""
     
@@ -58,7 +132,7 @@ class WorkAssignmentAPI:
         self.output_fields = ['assigned_worker', 'worker_type', 'estimated_time']
     
     def validate_work_data(self, work_data):
-        """驗證工作清單資料格式"""
+        """驗證工作清單資料格式（支持簡化格式）"""
         if not isinstance(work_data, list) or len(work_data) == 0:
             return False, "Work list must be a non-empty array"
         
@@ -66,29 +140,23 @@ class WorkAssignmentAPI:
             if not isinstance(work, dict):
                 return False, f"Work item {i+1} must be an object"
             
-            # 檢查必要欄位
+            # 檢查核心必要欄位（簡化驗證）
+            core_fields = ['measure_record_oid', 'priority', 'difficulty']
             missing_fields = []
-            for field in self.required_work_fields:
+            for field in core_fields:
                 if field not in work:
                     missing_fields.append(field)
             
             if missing_fields:
-                return False, f"Work item {i+1} is missing fields: {', '.join(missing_fields)}"
+                return False, f"Work item {i+1} is missing core fields: {', '.join(missing_fields)}"
             
             # 驗證資料型別
             try:
                 # 確保數值型別欄位正確
-                numeric_fields = ['data_effective_rate', 'num_af', 'num_pvc', 'num_sveb', 
-                                'delay_days', 'priority', 'actual_record_days', 'difficulty', 'x_value']
+                numeric_fields = ['priority', 'difficulty']
                 for field in numeric_fields:
                     if field in work and work[field] is not None:
                         work[field] = float(work[field])
-                
-                # 確保布林型別欄位正確
-                boolean_fields = ['is_vip', 'is_top_job', 'is_simple_work']
-                for field in boolean_fields:
-                    if field in work and work[field] is not None:
-                        work[field] = bool(work[field])
                         
             except (ValueError, TypeError) as e:
                 return False, f"Work item {i+1} data type error: {str(e)}"
@@ -132,10 +200,11 @@ class WorkAssignmentAPI:
         
         return True, f"Employee list data format is correct (Senior employees: {senior_count}, Junior employees: {junior_count})"
     
-    def process_assignment(self, work_data, employee_data, external_senior_count=None, external_junior_count=None):
+    def process_assignment(self, work_data, employee_data, external_senior_count=None, external_junior_count=None, generate_reports=False):
         """處理工作分配邏輯
         
-        使用重構後的統一介面，通過 StrategyManager 處理所有計算邏輯。
+        Args:
+            generate_reports: 是否生成完整報告（默認False以保持API響應速度）
         """
         try:
             # 轉換為DataFrame
@@ -178,6 +247,33 @@ class WorkAssignmentAPI:
             extra_cols = [col for col in result_df.columns if col not in ordered_cols]
             final_cols = ordered_cols + extra_cols
             
+            # 創建按日期分組的結果目錄
+            date_result_dir = create_date_result_directory()
+            
+            # 保存分配結果CSV
+            result_file = os.path.join(date_result_dir, 'result_with_assignments.csv')
+            result_df[final_cols].to_csv(result_file, index=False, encoding='utf-8')
+            logger.info(f"分配結果已保存到: {result_file}")
+            
+            # 保存統計摘要
+            summary_file = os.path.join(date_result_dir, 'assignment_summary.txt')
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write("工作分配統計摘要\n")
+                f.write("="*50 + "\n")
+                f.write(f"生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"基本統計:\n")
+                f.write(f"  總工作數量: {len(work_data)} 件\n")
+                f.write(f"  已分配工作: {assigned_count} 件\n")
+                f.write(f"  分配成功率: {(assigned_count / len(work_data)) * 100:.1f}%\n\n")
+                f.write(f"技師工作負載:\n")
+                f.write(f"  資深技師: {senior_workloads}\n")
+                f.write(f"  一般技師: {junior_workloads}\n")
+            logger.info(f"統計摘要已保存到: {summary_file}")
+            
+            # 如果需要生成完整報告
+            if generate_reports:
+                generate_reports_for_api(work_df, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir)
+            
             # 轉換回原始格式（按指定順序）
             result_data = result_df[final_cols].to_dict('records')
             
@@ -208,7 +304,8 @@ class WorkAssignmentAPI:
                         'senior_workers_source': 'external_api' if external_senior_count is not None else 'employee_list',
                         'junior_workers_source': 'external_api' if external_junior_count is not None else 'employee_list'
                     }
-                }
+                },
+                'result_directory': date_result_dir
             }
             
         except Exception as e:
@@ -229,22 +326,26 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'version': '1.0.0',
-        'service': '工作分配管理系統API'
+        'service': 'Assign Manager API'
     })
 
 @app.route('/api/assign', methods=['POST'])
 def assign_work():
     """
-    工作分配API端點
+    工作分配API端點（整合版本）
+    
+    支持兩種參數格式：
+    1. 完整格式：包含所有必要欄位
+    2. 簡化格式：只需要核心欄位 (measure_record_oid, priority, difficulty)
     
     請求格式:
     {
         "work_list": [
             {
                 "measure_record_oid": "123",
-                "upload_end_time": "2025-01-01",
-                "promise_time": "2025-01-02",
-                ... 其他工作欄位
+                "priority": 1,
+                "difficulty": 3,
+                ... 其他欄位（可選）
             }
         ],
         "employee_list": [
@@ -253,7 +354,8 @@ def assign_work():
                 "name": "張三",
                 "type": "SENIOR"
             }
-        ]
+        ],
+        "generate_reports": true/false  // 可選，是否生成完整報告（默認false）
     }
     
     回應格式:
@@ -261,6 +363,7 @@ def assign_work():
         "success": true,
         "data": [ ... 原始工作資料 + assigned_worker, worker_type, estimated_time ],
         "statistics": { ... 統計資訊 },
+        "result_directory": "結果保存目錄路徑",
         "message": "工作分配完成"
     }
     """
@@ -274,7 +377,7 @@ def assign_work():
                 'error': 'Request data cannot be empty'
             }), 400
         
-        # 提取工作清單和技師清單 (支援兩種參數格式)
+        # 提取工作清單和技師清單（支援多種參數格式）
         work_list = request_data.get('work_list', request_data.get('work_data', []))
         employee_list = request_data.get('employee_list', request_data.get('employee_data', []))
         
@@ -282,7 +385,10 @@ def assign_work():
         external_senior_count = request_data.get('senior_workers_count')
         external_junior_count = request_data.get('junior_workers_count')
         
-        # 驗證工作清單
+        # 是否生成完整報告
+        generate_reports = request_data.get('generate_reports', False)
+        
+        # 驗證工作清單（使用簡化驗證）
         valid, message = api_handler.validate_work_data(work_list)
         if not valid:
             return jsonify({
@@ -298,150 +404,34 @@ def assign_work():
                 'error': f'Employee list format error: {message}'
             }), 400
         
-        logger.info(f"收到工作分配請求 - 工作數量: {len(work_list)}, 技師數量: {len(employee_list)}")
+        logger.info(f"收到工作分配請求 - 工作數量: {len(work_list)}, 技師數量: {len(employee_list)}, 生成報告: {generate_reports}")
         
-        # 執行工作分配 (支持外部技師數量參數)
-        result = api_handler.process_assignment(work_list, employee_list, external_senior_count, external_junior_count)
+        # 執行工作分配
+        result = api_handler.process_assignment(
+            work_list, employee_list, 
+            external_senior_count, external_junior_count,
+            generate_reports
+        )
         
         if result['success']:
-            return jsonify({
+            response = {
                 'success': True,
                 'data': result['data'],
                 'statistics': result['statistics'],
+                'result_directory': result.get('result_directory', ''),
                 'message': 'Work assignment completed',
                 'timestamp': datetime.now().isoformat()
-            })
+            }
+            
+            if generate_reports:
+                response['message'] += ' with full reports generated'
+            
+            return jsonify(response)
         else:
             return jsonify({
                 'success': False,
                 'error': result['error']
             }), 500
-            
-    except Exception as e:
-        logger.error(f"API request processing failed: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'error': f'System error: {str(e)}'
-        }), 500
-
-@app.route('/process_assignment', methods=['POST'])
-def process_assignment_legacy():
-    """
-    工作分配API端點 (統一參數格式)
-    使用 work_list 和 employee_list 參數格式 (與其他API一致)
-    只檢查必要欄位：priority, difficulty 和 id, type
-    """
-    try:
-        request_data = request.get_json()
-        
-        if not request_data:
-            return jsonify({
-                'success': False,
-                'error': 'Request data cannot be empty'
-            }), 400
-        
-        # 提取工作清單和技師清單 (統一格式)
-        work_list = request_data.get('work_list', [])
-        employee_list = request_data.get('employee_list', [])
-        
-        # 向前兼容：如果使用舊的參數名稱，自動轉換
-        if not work_list and 'work_data' in request_data:
-            work_list = request_data.get('work_data', [])
-            logger.warning("Used deprecated 'work_data' parameter, please use 'work_list' instead")
-            
-        if not employee_list and 'employee_data' in request_data:
-            employee_list = request_data.get('employee_data', [])
-            logger.warning("Used deprecated 'employee_data' parameter, please use 'employee_list' instead")
-        
-        # 簡化驗證：只檢查核心欄位
-        if not work_list:
-            return jsonify({
-                'success': False,
-                'error': 'Work list cannot be empty'
-            }), 400
-            
-        if not employee_list:
-            return jsonify({
-                'success': False,
-                'error': 'Employee list cannot be empty'
-            }), 400
-        
-        # 檢查工作數據必要欄位
-        for i, work in enumerate(work_list):
-            missing_fields = []
-            if 'measure_record_oid' not in work:
-                missing_fields.append('measure_record_oid')
-            if 'priority' not in work:
-                missing_fields.append('priority')
-            if 'difficulty' not in work:
-                missing_fields.append('difficulty')
-            
-            if missing_fields:
-                return jsonify({
-                    'success': False,
-                    'error': f'Work item {i+1} is missing fields: {", ".join(missing_fields)}'
-                }), 400
-        
-        # 檢查技師數據必要欄位  
-        for i, emp in enumerate(employee_list):
-            if 'id' not in emp or 'type' not in emp:
-                return jsonify({
-                    'success': False,
-                    'error': f'Employee item {i+1} is missing id or type field'
-                }), 400
-            if emp['type'].upper() not in ['SENIOR', 'JUNIOR']:
-                return jsonify({
-                    'success': False,
-                    'error': f'Employee item {i+1} type must be SENIOR or JUNIOR'
-                }), 400
-        
-        logger.info(f"收到工作分配請求 (統一格式) - 工作數量: {len(work_list)}, 技師數量: {len(employee_list)}")
-        
-        # 直接調用重構後的分配函數
-        work_df = pd.DataFrame(work_list)
-        
-        result_df, senior_workload, junior_workload = assign_workers_to_tasks(work_df, employee_list)
-        
-        # 統計結果
-        assigned_count = len(result_df[result_df['assigned_worker'] != 'UNASSIGNED'])
-        
-        # 確保所有欄位都存在
-        if 'assigned_worker' not in result_df.columns:
-            result_df['assigned_worker'] = 'UNASSIGNED'
-        if 'worker_type' not in result_df.columns:
-            result_df['worker_type'] = 'UNASSIGNED'
-        if 'estimated_time' not in result_df.columns:
-            result_df['estimated_time'] = 0
-        
-        # 指定欄位順序
-        desired_order = [
-            "measure_record_oid", "upload_end_time", "promise_time", "task_status", "task_status_name",
-            "institution_id", "data_effective_rate", "num_af", "num_pvc", "num_sveb", "delay_days",
-            "is_vip", "is_top_job", "is_simple_work", "priority", "actual_record_days", "source_file",
-            "difficulty", "x_value", "worker_type", "assigned_worker", "estimated_time"
-        ]
-        
-        # 只保留DataFrame中實際存在的欄位，並按指定順序排列
-        ordered_cols = [col for col in desired_order if col in result_df.columns]
-        # 如果有其他欄位不在desired_order中，也加到最後
-        extra_cols = [col for col in result_df.columns if col not in ordered_cols]
-        final_cols = ordered_cols + extra_cols
-        
-        return jsonify({
-            'success': True,
-            'data': result_df[final_cols].to_dict('records'),
-            'statistics': {
-                'total_tasks': len(work_list),
-                'assigned_tasks': assigned_count,
-                'unassigned_tasks': len(work_list) - assigned_count,
-                'assignment_rate': round((assigned_count / len(work_list)) * 100, 2),
-                'senior_workloads': senior_workload,
-                'junior_workloads': junior_workload
-            },
-            'message': 'Work assignment completed',
-            'timestamp': datetime.now().isoformat()
-        })
             
     except Exception as e:
         logger.error(f"API request processing failed: {str(e)}")
@@ -483,7 +473,8 @@ def test_with_csv():
     請求格式:
     {
         "work_file": "result.csv",  // 可選，預設使用result.csv
-        "employee_file": "employee_list.csv"  // 可選，預設使用employee_list.csv
+        "employee_file": "employee_list.csv",  // 可選，預設使用employee_list.csv
+        "generate_reports": true/false  // 可選，是否生成完整報告（默認false）
     }
     """
     try:
@@ -492,6 +483,7 @@ def test_with_csv():
         # 取得檔案路徑
         work_file = request_data.get('work_file', 'result.csv')
         employee_file = request_data.get('employee_file', 'employee_list.csv')
+        generate_reports = request_data.get('generate_reports', False)
         
         # 讀取工作清單CSV
         work_file_path = get_data_file_path(work_file)
@@ -530,23 +522,29 @@ def test_with_csv():
                 'error': f'Failed to read employee list: {str(e)}'
             }), 400
         
-        logger.info(f"使用CSV檔案測試 - 工作檔案: {work_file}, 技師檔案: {employee_file}")
+        logger.info(f"使用CSV檔案測試 - 工作檔案: {work_file}, 技師檔案: {employee_file}, 生成報告: {generate_reports}")
         
         # 執行工作分配
-        result = api_handler.process_assignment(work_list, employee_list)
+        result = api_handler.process_assignment(work_list, employee_list, generate_reports=generate_reports)
         
         if result['success']:
-            return jsonify({
+            response = {
                 'success': True,
                 'data': result['data'],
                 'statistics': result['statistics'],
+                'result_directory': result.get('result_directory', ''),
                 'message': 'CSV test completed successfully',
                 'timestamp': datetime.now().isoformat(),
                 'files_used': {
                     'work_file': work_file,
                     'employee_file': employee_file
                 }
-            })
+            }
+            
+            if generate_reports:
+                response['message'] += ' with full reports generated'
+            
+            return jsonify(response)
         else:
             return jsonify({
                 'success': False,
