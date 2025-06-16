@@ -8,22 +8,22 @@ except ImportError:
     get_actual_employee_counts = None
 
 # ===== 人力配置參數 =====
-# 預設值，如果無法讀取實際員工名單時使用
-DEFAULT_SENIOR_WORKERS = 5           # 預設資深員工人數
-DEFAULT_JUNIOR_WORKERS = 10          # 預設一般員工人數
+# 預設值，如果無法讀取實際技師名單時使用
+DEFAULT_SENIOR_WORKERS = 5           # 預設資深技師人數
+DEFAULT_JUNIOR_WORKERS = 10          # 預設一般技師人數
 WORK_HOURS_PER_DAY = 8 * 60         # 每人每日工時(分鐘)
 
-# 動態獲取實際員工數量
+# 動態獲取實際技師數量
 def get_dynamic_worker_counts(external_senior_count=None, external_junior_count=None):
     """
-    動態獲取員工數量，優先順序：
+    動態獲取技師數量，優先順序：
     1. 外部API傳入的參數
     2. 從employee_list.csv讀取的實際數量
     3. 預設配置值
     
     Args:
-        external_senior_count: API傳入的資深員工數量
-        external_junior_count: API傳入的一般員工數量
+        external_senior_count: API傳入的資深技師數量
+        external_junior_count: API傳入的一般技師數量
     
     Returns:
         tuple: (senior_count, junior_count)
@@ -32,7 +32,7 @@ def get_dynamic_worker_counts(external_senior_count=None, external_junior_count=
     if external_senior_count is not None and external_junior_count is not None:
         return external_senior_count, external_junior_count
     
-    # 嘗試從實際員工名單讀取
+    # 嘗試從實際技師名單讀取
     try:
         # 嘗試使用全局已導入的函數或動態導入
         try:
@@ -48,7 +48,7 @@ def get_dynamic_worker_counts(external_senior_count=None, external_junior_count=
             
             return senior_count, junior_count
         except ImportError:
-            # 無法讀取實際員工數量，使用預設值與API參數
+            # 無法讀取實際技師數量，使用預設值與API參數
             senior_count = external_senior_count if external_senior_count is not None else DEFAULT_SENIOR_WORKERS
             junior_count = external_junior_count if external_junior_count is not None else DEFAULT_JUNIOR_WORKERS
             return senior_count, junior_count
@@ -65,20 +65,20 @@ except:
     SENIOR_WORKERS = DEFAULT_SENIOR_WORKERS
     JUNIOR_WORKERS = DEFAULT_JUNIOR_WORKERS
 
-# ===== 外部員工名單參數 =====
-# 外部員工名單JSON格式範例：
+# ===== 外部技師名單參數 =====
+# 外部技師名單JSON格式範例：
 # {
 #     "senior_workers": ["張三", "李四", "王五"],
 #     "junior_workers": ["陳六", "林七", "黃八", "周九", "吳十"]
 # }
-EXTERNAL_WORKER_LIST_FILE = "employee_list.csv"  # 外部員工名單CSV檔案
-USE_EXTERNAL_WORKER_LIST = True  # 是否使用外部員工名單
+EXTERNAL_WORKER_LIST_FILE = "employee_list.csv"  # 外部技師名單CSV檔案
+USE_EXTERNAL_WORKER_LIST = True  # 是否使用外部技師名單
 
 # ===== 工作目標參數 =====
 MINIMUM_WORK_TARGET = 300    # 每日最低工作完成目標
 
 # ===== 工作時間參數 =====
-# 資深員工各難度所需時間(分鐘) - 難度1為最簡單，7為最難
+# 資深技師各難度所需時間(分鐘) - 難度1為最簡單，7為最難
 SENIOR_TIME = {
     1: 5,   # 難度1（最簡單）：5分鐘
     2: 10,  # 難度2：10分鐘  
@@ -89,7 +89,7 @@ SENIOR_TIME = {
     7: 60   # 難度7（最難）：60分鐘
 }
 
-# 一般員工需要1.5倍時間
+# 一般技師需要1.5倍時間
 JUNIOR_TIME = {k: int(v * 1.5) for k, v in SENIOR_TIME.items()}
 
 # ===== 優先權設定 =====
@@ -109,16 +109,16 @@ def print_config():
     print("📋 當前系統配置參數")
     print("="*50)
     print(f"👥 人力配置:")
-    print(f"   資深員工: {SENIOR_WORKERS} 人")
-    print(f"   一般員工: {JUNIOR_WORKERS} 人")
+    print(f"   資深技師: {SENIOR_WORKERS} 人")
+    print(f"   一般技師: {JUNIOR_WORKERS} 人")
     print(f"   每人日工時: {WORK_HOURS_PER_DAY} 分鐘")
     print(f"")
     print(f"🎯 工作目標:")
     print(f"   每日最低完成: {MINIMUM_WORK_TARGET} 件")
     print(f"")
     print(f"⏱️ 作業時間:")
-    print(f"   資深員工時間: {SENIOR_TIME}")
-    print(f"   一般員工時間: {JUNIOR_TIME}")
+    print(f"   資深技師時間: {SENIOR_TIME}")
+    print(f"   一般技師時間: {JUNIOR_TIME}")
     print("="*50)
 
 def get_runtime_config(external_senior_count=None, external_junior_count=None):
@@ -126,13 +126,13 @@ def get_runtime_config(external_senior_count=None, external_junior_count=None):
     獲取運行時配置，支持外部參數
     
     Args:
-        external_senior_count: API傳入的資深員工數量
-        external_junior_count: API傳入的一般員工數量
+        external_senior_count: API傳入的資深技師數量
+        external_junior_count: API傳入的一般技師數量
     
     Returns:
         dict: 包含所有配置參數的字典
     """
-    # 使用動態員工數量計算
+    # 使用動態技師數量計算
     senior_count, junior_count = get_dynamic_worker_counts(external_senior_count, external_junior_count)
     
     return {
@@ -153,8 +153,8 @@ def get_runtime_config(external_senior_count=None, external_junior_count=None):
 def print_runtime_config():
     """打印運行時配置信息"""
     config = get_runtime_config()
-    print(f"   資深員工: {config['senior_workers']} 人")
-    print(f"   一般員工: {config['junior_workers']} 人")
+    print(f"   資深技師: {config['senior_workers']} 人")
+    print(f"   一般技師: {config['junior_workers']} 人")
     print(f"   工作目標: {config['minimum_work_target']} 件")
     print(f"   日工時: {config['work_hours_per_day']} 分鐘")
     return config

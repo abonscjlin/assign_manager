@@ -16,7 +16,7 @@ def main():
     from path_utils import get_data_file_path
     df = pd.read_csv(get_data_file_path('result.csv'))
 
-    # 獲取實際員工數量
+    # 獲取實際技師數量
     actual_senior_count, actual_junior_count = get_actual_employee_counts()
     
     # 使用統一策略管理器（避免重複計算）
@@ -42,7 +42,7 @@ def main():
 • 總工作量：{len(df)} 件
 • 低難度工作(1-3級)：{len(df[df['difficulty'].isin([1,2,3])])} 件  
 • 優先權1工作：{len(df[df['priority'] == 1])} 件
-• 人力配置：資深員工{actual_senior_count}人 + 一般員工{actual_junior_count}人
+• 人力配置：資深技師{actual_senior_count}人 + 一般技師{actual_junior_count}人
 • 每人日工時：{WORK_HOURS_PER_DAY//60}小時 ({WORK_HOURS_PER_DAY}分鐘)
 
 🏆 **最佳策略：動態優先分配法**
@@ -58,7 +58,7 @@ def main():
 📋 **具體人力分配**
 """)
 
-    print("難度 | 資深員工 | 一般員工 | 資深用時 | 一般用時 | 總件數")
+    print("難度 | 資深技師 | 一般技師 | 資深用時 | 一般用時 | 總件數")
     print("-" * 55)
     total_senior = 0
     total_junior = 0
@@ -84,28 +84,28 @@ def main():
 ⚙️ **實施步驟**
 
 1️⃣ **第一階段：優先權1工作 (必須100%完成)**
-   • 所有優先權1工作 ({len(df[df['priority'] == 1])} 件) 優先分配給資深員工
+   • 所有優先權1工作 ({len(df[df['priority'] == 1])} 件) 優先分配給資深技師
    • 預計耗時：約 {sum(optimal_assignment[diff][0] * SENIOR_TIME[diff] for diff in [1,2,3,4,5,6,7] if diff in optimal_assignment)} 分鐘
 
 2️⃣ **第二階段：確保{MINIMUM_WORK_TARGET}件最低目標**
    • 按優先權2→3→4→5順序分配工作
-   • 資深員工專攻高難度 (6-7級)，一般員工處理中低難度 (1-5級)
+   • 資深技師專攻高難度 (6-7級)，一般技師處理中低難度 (1-5級)
    • 如需要，優先增加難度1的簡單工作
 
 3️⃣ **第三階段：剩餘時間最大化產出**
-   • 利用剩餘的{leftover_junior}分鐘一般員工時間
+   • 利用剩餘的{leftover_junior}分鐘一般技師時間
    • 處理優先權6的低優先工作
-   • 資深員工可協助指導一般員工
+   • 資深技師可協助指導一般技師
 
 📝 **具體操作建議**
 
-**資深員工 ({actual_senior_count}人) 主要職責：**
+**資深技師 ({actual_senior_count}人) 主要職責：**
 • 所有優先權1工作優先處理
 • 專攻難度6-7的高難度工作
-• 協助一般員工解決複雜問題
+• 協助一般技師解決複雜問題
 • 處理突發緊急任務
 
-**一般員工 ({actual_junior_count}人) 主要職責：**
+**一般技師 ({actual_junior_count}人) 主要職責：**
 • 大量處理難度1-5的工作
 • 優先完成優先權2-4的工作
 • 最後處理優先權6的工作
@@ -113,7 +113,7 @@ def main():
 ⚠️ **風險控制**
 
 🔴 **高風險項目：**
-• 高難度工作({high_difficulty_work}件)接近資深員工處理極限
+• 高難度工作({high_difficulty_work}件)接近資深技師處理極限
 • 建議預留10-15%彈性時間應對突發狀況
 
 🟡 **中等風險：**
@@ -122,19 +122,19 @@ def main():
 
 ✅ **風險緩解措施：**
 • 建立工作預警機制
-• 培訓一般員工處理中等難度工作
+• 培訓一般技師處理中等難度工作
 • 設立支援調度機制
 
 💡 **持續優化建議**
 
 📈 **短期優化 (1-3個月)：**
 • 追蹤實際執行效果，調整時間預估
-• 培訓一般員工提升技能，減少處理時間
+• 培訓一般技師提升技能，減少處理時間
 • 建立工作優先級動態調整機制
 
 📈 **中期優化 (3-6個月)：**
 • 分析歷史數據，優化人力配置比例
-• 考慮增加資深員工或提升一般員工技能
+• 考慮增加資深技師或提升一般技師技能
 • 建立自動化工具減少簡單工作時間
 
 📈 **長期優化 (6-12個月)：**

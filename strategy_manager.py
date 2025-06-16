@@ -23,15 +23,15 @@ class StrategyManager:
         
         Args:
             work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-            employee_data: 員工數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
+            employee_data: 技師數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
             data_file: 數據文件路徑（僅在 work_data 為 None 時使用）
             **kwargs: 外部參數覆蓋，包括：
-                - senior_workers: 資深員工人數（可選，會從 employee_data 推導）
-                - junior_workers: 一般員工人數（可選，會從 employee_data 推導）
+                - senior_workers: 資深技師人數（可選，會從 employee_data 推導）
+                - junior_workers: 一般技師人數（可選，會從 employee_data 推導）
                 - work_hours_per_day: 每人每日工時
                 - minimum_work_target: 最低工作目標
-                - senior_time: 資深員工時間配置
-                - junior_time: 一般員工時間配置
+                - senior_time: 資深技師時間配置
+                - junior_time: 一般技師時間配置
         """
         self.data_file = data_file
         self._df = work_data
@@ -41,10 +41,10 @@ class StrategyManager:
         self._leftover_junior = None
         self._computed = False
         
-        # 動態計算員工數量
+        # 動態計算技師數量
         self._calculate_employee_counts()
         
-        # 設置參數（優先使用外部參數，然後從員工數據推導）
+        # 設置參數（優先使用外部參數，然後從技師數據推導）
         self.work_hours_per_day = kwargs.get('work_hours_per_day', WORK_HOURS_PER_DAY)
         self.minimum_work_target = kwargs.get('minimum_work_target', MINIMUM_WORK_TARGET)
         self.senior_time = kwargs.get('senior_time', SENIOR_TIME)
@@ -57,18 +57,18 @@ class StrategyManager:
         }
     
     def _calculate_employee_counts(self):
-        """動態計算員工數量，統一使用 type 欄位判斷員工級別"""
-        # 如果有員工數據（DataFrame 或 list），從中計算
+        """動態計算技師數量，統一使用 type 欄位判斷技師級別"""
+        # 如果有技師數據（DataFrame 或 list），從中計算
         if self._employee_data is not None:
             if hasattr(self._employee_data, 'shape'):  # DataFrame
-                # 統一使用 type 欄位來區分資深/一般員工
+                # 統一使用 type 欄位來區分資深/一般技師
                 if 'type' in self._employee_data.columns:
                     senior_workers = len(self._employee_data[self._employee_data['type'].str.upper() == 'SENIOR'])
                     junior_workers = len(self._employee_data[self._employee_data['type'].str.upper() == 'JUNIOR'])
                 else:
                     # 如果沒有 type 欄位，使用總數的默認比例
                     total = len(self._employee_data)
-                    senior_workers = max(1, total // 3)  # 約 1/3 是資深員工
+                    senior_workers = max(1, total // 3)  # 約 1/3 是資深技師
                     junior_workers = total - senior_workers
             else:  # list（假設是字典列表）
                 # 統一使用 type 欄位
@@ -81,20 +81,20 @@ class StrategyManager:
                     senior_workers = max(1, total // 3)
                     junior_workers = total - senior_workers
         else:
-            # 沒有員工數據，讀取本地 CSV
+            # 沒有技師數據，讀取本地 CSV
             senior_workers, junior_workers = get_dynamic_worker_counts()
         
         self.senior_workers = senior_workers
         self.junior_workers = junior_workers
     
     def get_employee_lists(self):
-        """統一的員工名單提取邏輯，返回資深和一般員工名單
+        """統一的技師名單提取邏輯，返回資深和一般技師名單
         
         Returns:
             tuple: (senior_workers_list, junior_workers_list)
         """
         if self._employee_data is None:
-            # 讀取本地員工檔案
+            # 讀取本地技師檔案
             from employee_manager import load_external_employee_list
             return load_external_employee_list()
         
@@ -233,7 +233,7 @@ def get_strategy_manager(work_data=None, employee_data=None, **kwargs):
     
     Args:
         work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-        employee_data: 員工數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
+        employee_data: 技師數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
         **kwargs: 外部參數，如果提供則創建新實例
     """
     global _strategy_manager
@@ -252,7 +252,7 @@ def get_optimal_assignment(work_data=None, employee_data=None, **kwargs):
     
     Args:
         work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-        employee_data: 員工數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
+        employee_data: 技師數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
         **kwargs: 其他參數
     """
     return get_strategy_manager(work_data=work_data, employee_data=employee_data, **kwargs).get_optimal_assignment()
@@ -262,7 +262,7 @@ def get_strategy_summary(work_data=None, employee_data=None, **kwargs):
     
     Args:
         work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-        employee_data: 員工數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
+        employee_data: 技師數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
         **kwargs: 其他參數
     """
     return get_strategy_manager(work_data=work_data, employee_data=employee_data, **kwargs).get_strategy_summary()
@@ -272,7 +272,7 @@ def get_leftover_time(work_data=None, employee_data=None, **kwargs):
     
     Args:
         work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-        employee_data: 員工數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
+        employee_data: 技師數據 DataFrame 或 list，如果為 None 則讀取本地 CSV
         **kwargs: 其他參數
     """
     return get_strategy_manager(work_data=work_data, employee_data=employee_data, **kwargs).get_leftover_time() 

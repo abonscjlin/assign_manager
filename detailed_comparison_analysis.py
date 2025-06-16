@@ -49,8 +49,8 @@ def detailed_assignment_comparison():
     print(f"{'未分配任務':<20} {orig_total-orig_assigned:<15} {opt_total-opt_assigned:<15} {(opt_total-opt_assigned)-(orig_total-orig_assigned):+}")
     print(f"{'分配成功率':<20} {orig_rate:.1f}%{'':<9} {opt_rate:.1f}%{'':<9} {opt_rate-orig_rate:+.1f}%")
     
-    # 員工類型分配對比
-    print("\n👥 員工類型分配對比")
+    # 技師類型分配對比
+    print("\n👥 技師類型分配對比")
     print("-"*50)
     
     # 原始分配
@@ -65,8 +65,8 @@ def detailed_assignment_comparison():
     
     print(f"{'類型':<15} {'原始分配':<15} {'AI優化分配':<15} {'改進':<15}")
     print("-"*60)
-    print(f"{'資深員工':<15} {orig_senior:<15} {opt_senior:<15} {opt_senior-orig_senior:+}")
-    print(f"{'一般員工':<15} {orig_junior:<15} {opt_junior:<15} {opt_junior-orig_junior:+}")
+    print(f"{'資深技師':<15} {orig_senior:<15} {opt_senior:<15} {opt_senior-orig_senior:+}")
+    print(f"{'一般技師':<15} {orig_junior:<15} {opt_junior:<15} {opt_junior-orig_junior:+}")
     
     # 難度分佈對比
     print("\n🎯 難度分佈對比")
@@ -115,15 +115,15 @@ def detailed_assignment_comparison():
     print(f"{'TOP任務':<15} {top_orig_assigned}/{top_orig} ({top_orig_assigned/top_orig*100:.1f}%){'':<5} {top_opt_assigned}/{top_opt} ({top_opt_assigned/top_opt*100:.1f}%){'':<5} {top_opt_assigned-top_orig_assigned:+}")
     print(f"{'簡單任務':<15} {simple_orig_assigned}/{simple_orig} ({simple_orig_assigned/simple_orig*100:.1f}%){'':<3} {simple_opt_assigned}/{simple_opt} ({simple_opt_assigned/simple_opt*100:.1f}%){'':<3} {simple_opt_assigned-simple_orig_assigned:+}")
     
-    # 個別員工負載對比
-    print("\n🔍 個別員工負載對比")
+    # 個別技師負載對比
+    print("\n🔍 個別技師負載對比")
     print("-"*50)
     
-    # 原始員工負載
+    # 原始技師負載
     orig_worker_loads = orig_assigned_df['assigned_worker'].value_counts().sort_index()
     opt_worker_loads = opt_assigned_df['assigned_worker'].value_counts().sort_index()
     
-    print("資深員工負載對比:")
+    print("資深技師負載對比:")
     senior_workers = [w for w in orig_worker_loads.index if 'SENIOR' in w]
     for worker in sorted(senior_workers):
         orig_load = orig_worker_loads.get(worker, 0)
@@ -131,7 +131,7 @@ def detailed_assignment_comparison():
         improvement = opt_load - orig_load
         print(f"  {worker:<18}: {orig_load}件 → {opt_load}件 ({improvement:+})")
     
-    print("\n一般員工負載對比:")
+    print("\n一般技師負載對比:")
     junior_workers = [w for w in orig_worker_loads.index if 'JUNIOR' in w]
     for worker in sorted(junior_workers):
         orig_load = orig_worker_loads.get(worker, 0)
@@ -139,10 +139,10 @@ def detailed_assignment_comparison():
         improvement = opt_load - orig_load
         print(f"  {worker:<18}: {orig_load}件 → {opt_load}件 ({improvement:+})")
     
-    # 新增的員工（如果有的話）
+    # 新增的技師（如果有的話）
     new_workers = set(opt_worker_loads.index) - set(orig_worker_loads.index)
     if new_workers:
-        print("\n新增員工:")
+        print("\n新增技師:")
         for worker in sorted(new_workers):
             opt_load = opt_worker_loads.get(worker, 0)
             print(f"  {worker:<18}: 0件 → {opt_load}件 (新增)")
@@ -233,7 +233,7 @@ def detailed_assignment_comparison():
                                      'assigned_worker_orig', 'worker_type_orig', 
                                      'assigned_worker_opt', 'worker_type_opt']].copy()
         
-        changes_export.columns = ['任務ID', '難度', 'VIP', 'TOP任務', '原始分配員工', '原始員工類型', 'AI優化分配員工', 'AI優化員工類型']
+        changes_export.columns = ['任務ID', '難度', 'VIP', 'TOP任務', '原始分配技師', '原始技師類型', 'AI優化分配技師', 'AI優化技師類型']
         changes_export.to_csv(full_changes_file, index=False, encoding='utf-8-sig')
         
         print(f"📄 任務變化詳細清單已保存至: {full_changes_file}")

@@ -111,7 +111,7 @@ def analyze_workload_gap(df):
     for diff in range(1, 8):
         senior_time = SENIOR_TIME[diff]
         junior_time = JUNIOR_TIME[diff]
-        print(f"   難度 {diff}: 資深員工 {senior_time}分鐘, 一般員工 {junior_time}分鐘")
+        print(f"   難度 {diff}: 資深技師 {senior_time}分鐘, 一般技師 {junior_time}分鐘")
         
         # 估算該難度未分配的工作數量
         estimated_count = min(remaining_gap, max(1, unassigned_count // 7))
@@ -128,11 +128,11 @@ def analyze_workload_gap(df):
         junior_time = count * JUNIOR_TIME[diff]
         total_estimated_time_senior += senior_time
         total_estimated_time_junior += junior_time
-        print(f"   難度 {diff}: {count} 件 (資深員工需{senior_time}分鐘, 一般員工需{junior_time}分鐘)")
+        print(f"   難度 {diff}: {count} 件 (資深技師需{senior_time}分鐘, 一般技師需{junior_time}分鐘)")
     
     print(f"\n💼 處理缺口所需總時間:")
-    print(f"   如全由資深員工處理: {total_estimated_time_senior} 分鐘")
-    print(f"   如全由一般員工處理: {total_estimated_time_junior} 分鐘")
+    print(f"   如全由資深技師處理: {total_estimated_time_senior} 分鐘")
+    print(f"   如全由一般技師處理: {total_estimated_time_junior} 分鐘")
     
     return gap_to_target, unassigned_work_profile
 
@@ -143,13 +143,13 @@ def calculate_workforce_requirements(df):
     print("="*80)
     print(f"📅 分析時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 載入實際員工數量
+    # 載入實際技師數量
     actual_senior_count, actual_junior_count = get_actual_employee_counts()
     
     # 分析當前配置
     print(f"\n📋 當前人力配置:")
-    print(f"   資深員工: {actual_senior_count} 人")
-    print(f"   一般員工: {actual_junior_count} 人")
+    print(f"   資深技師: {actual_senior_count} 人")
+    print(f"   一般技師: {actual_junior_count} 人")
     print(f"   總人力: {actual_senior_count + actual_junior_count} 人")
     print(f"   每人日工時: {WORK_HOURS_PER_DAY} 分鐘 ({WORK_HOURS_PER_DAY//60} 小時)")
     print(f"   總可用工時: {(actual_senior_count + actual_junior_count) * WORK_HOURS_PER_DAY} 分鐘")
@@ -168,8 +168,8 @@ def calculate_workforce_requirements(df):
     # 擴大測試範圍
     scenarios = []
     
-    # 方案一：只增加一般員工（擴大範圍）
-    print(f"\n💡 方案一：只增加一般員工")
+    # 方案一：只增加一般技師（擴大範圍）
+    print(f"\n💡 方案一：只增加一般技師")
     for additional_junior in range(1, 11):  # 增加到10人
         new_junior = actual_junior_count + additional_junior
         result = simulate_workforce_scenario(actual_senior_count, new_junior, df)
@@ -177,7 +177,7 @@ def calculate_workforce_requirements(df):
         cost_increase = (additional_junior / (actual_senior_count + actual_junior_count)) * 100
         
         scenarios.append({
-            'name': f'增加{additional_junior}名一般員工',
+            'name': f'增加{additional_junior}名一般技師',
             'senior': actual_senior_count,
             'junior': new_junior,
             'additional_cost': cost_increase,
@@ -191,10 +191,10 @@ def calculate_workforce_requirements(df):
         
         # 一旦達標就輸出詳細信息
         if result['meets_target'] and additional_junior <= 3:
-            print(f"      💡 首次達標方案：增加{additional_junior}名一般員工")
+            print(f"      💡 首次達標方案：增加{additional_junior}名一般技師")
     
-    # 方案二：只增加資深員工（擴大範圍）
-    print(f"\n💡 方案二：只增加資深員工")
+    # 方案二：只增加資深技師（擴大範圍）
+    print(f"\n💡 方案二：只增加資深技師")
     for additional_senior in range(1, 8):  # 增加到7人
         new_senior = actual_senior_count + additional_senior
         result = simulate_workforce_scenario(new_senior, actual_junior_count, df)
@@ -202,7 +202,7 @@ def calculate_workforce_requirements(df):
         cost_increase = (additional_senior * 1.5 / (actual_senior_count + actual_junior_count)) * 100
         
         scenarios.append({
-            'name': f'增加{additional_senior}名資深員工',
+            'name': f'增加{additional_senior}名資深技師',
             'senior': new_senior,
             'junior': actual_junior_count,
             'additional_cost': cost_increase,
@@ -216,7 +216,7 @@ def calculate_workforce_requirements(df):
         
         # 一旦達標就輸出詳細信息
         if result['meets_target'] and additional_senior <= 3:
-            print(f"      💡 首次達標方案：增加{additional_senior}名資深員工")
+            print(f"      💡 首次達標方案：增加{additional_senior}名資深技師")
     
     # 方案三：混合增加（擴大範圍）
     print(f"\n💡 方案三：混合增加")
@@ -250,7 +250,7 @@ def calculate_workforce_requirements(df):
         
         # 一旦達標就輸出詳細信息
         if result['meets_target'] and (add_senior + add_junior) <= 4:
-            print(f"      💡 首次達標方案：增加{add_senior}資深+{add_junior}一般員工")
+            print(f"      💡 首次達標方案：增加{add_senior}資深+{add_junior}一般技師")
     
     # 找出達標的最優方案
     feasible_scenarios = [s for s in scenarios if s['meets_target']]
@@ -327,8 +327,8 @@ def calculate_workforce_requirements(df):
     print(f"🎯 **基於您的要求（不降低300件最低目標），推薦採用最平衡方案：**")
     print(f"")
     print(f"   📈 **具體調整：**")
-    print(f"   - 資深員工：{actual_senior_count} → {most_balanced['senior']} 人 (+{most_balanced['senior']-actual_senior_count}人)")
-    print(f"   - 一般員工：{actual_junior_count} → {most_balanced['junior']} 人 (+{most_balanced['junior']-actual_junior_count}人)")
+    print(f"   - 資深技師：{actual_senior_count} → {most_balanced['senior']} 人 (+{most_balanced['senior']-actual_senior_count}人)")
+    print(f"   - 一般技師：{actual_junior_count} → {most_balanced['junior']} 人 (+{most_balanced['junior']-actual_junior_count}人)")
     print(f"   - 總人力：{actual_senior_count + actual_junior_count} → {most_balanced['senior'] + most_balanced['junior']} 人")
     print(f"   - 人力增加幅度：{((most_balanced['senior'] + most_balanced['junior']) - (actual_senior_count + actual_junior_count))/(actual_senior_count + actual_junior_count)*100:.1f}%")
     print(f"")
@@ -354,12 +354,12 @@ def calculate_workforce_requirements(df):
         senior_increase = most_balanced['senior'] - actual_senior_count  
         junior_increase = most_balanced['junior'] - actual_junior_count
         
-        print(f"   階段一：優先增加{min(2, senior_increase)}名資深員工和{min(3, junior_increase)}名一般員工")
+        print(f"   階段一：優先增加{min(2, senior_increase)}名資深技師和{min(3, junior_increase)}名一般技師")
         if senior_increase > 2 or junior_increase > 3:
             remaining_senior = max(0, senior_increase - 2)
             remaining_junior = max(0, junior_increase - 3)
             if remaining_senior > 0 or remaining_junior > 0:
-                print(f"   階段二：再增加{remaining_senior}名資深員工和{remaining_junior}名一般員工")
+                print(f"   階段二：再增加{remaining_senior}名資深技師和{remaining_junior}名一般技師")
     
     return most_balanced
 

@@ -8,7 +8,7 @@
 
 功能包括：
 1. 最佳策略分析
-2. 工作分配給具體員工 (支援JSON格式員工輸入)
+2. 工作分配給具體技師 (支援JSON格式技師輸入)
 3. 生成詳細統計報告
 4. 生成最終建議報告
 5. 自動人力需求分析（當未達標時）
@@ -22,9 +22,9 @@
     --report-only      只生成報告
     --workforce-only   只執行人力需求分析
     --full             執行完整流程 (預設)
-    --json-workers     使用JSON格式員工輸入 (需要--assigned-worker和--worker-type參數)
-    --assigned-worker  JSON格式的員工分配 (配合--json-workers使用)
-    --worker-type      JSON格式的員工類型 (配合--json-workers使用)
+    --json-workers     使用JSON格式技師輸入 (需要--assigned-worker和--worker-type參數)
+    --assigned-worker  JSON格式的技師分配 (配合--json-workers使用)
+    --worker-type      JSON格式的技師類型 (配合--json-workers使用)
 """
 
 import sys
@@ -51,7 +51,7 @@ import glob
 from md_report_generator import generate_md_report
 from direct_calculation import direct_workforce_calculation
 
-# 導入員工管理模組
+# 導入技師管理模組
 from employee_manager import print_actual_employee_config, get_actual_employee_counts
 from update_assignment_results import assign_workers_with_json_input
 from path_utils import get_data_file_path
@@ -88,18 +88,18 @@ class WorkAssignmentManager:
         print("=" * 50)
         print(f"📅 執行時間: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"📊 資料檔案: {self.data_file}")
-        # 載入實際員工數量顯示
+        # 載入實際技師數量顯示
         print_actual_employee_config()
         print(f"🎯 最低目標: {MINIMUM_WORK_TARGET} 件工作")
         
         if self.use_json_workers:
-            print(f"🔧 使用模式: JSON格式員工輸入")
+            print(f"🔧 使用模式: JSON格式技師輸入")
             if self.assigned_worker_json:
                 print(f"   assigned_worker參數: {len(self.assigned_worker_json)} 字符")
             if self.worker_type_json:
                 print(f"   worker_type參數: {len(self.worker_type_json)} 字符")
         else:
-            print(f"🔧 使用模式: 標準員工配置")
+            print(f"🔧 使用模式: 標準技師配置")
         
         print("=" * 50)
     
@@ -124,7 +124,7 @@ class WorkAssignmentManager:
             print("\n👥 第2步: 使用JSON格式執行工作分配...")
             return self.run_json_assignment()
         else:
-            print("\n👥 第2步: 執行工作分配給具體員工...")
+            print("\n👥 第2步: 執行工作分配給具體技師...")
             
             try:
                 # 執行工作分配（使用統一策略管理器）
@@ -218,7 +218,7 @@ class WorkAssignmentManager:
             print(f"❌ 最佳策略分析失敗: {e}\n")
         
         # 第2步：具體工作分配
-        print("👥 第2步: 執行工作分配給具體員工...")
+        print("👥 第2步: 執行工作分配給具體技師...")
         try:
             result = self.run_assignment()
             if result:
@@ -429,17 +429,17 @@ def main():
     parser.add_argument(
         '--json-workers',
         action='store_true',
-        help='使用JSON格式員工輸入'
+        help='使用JSON格式技師輸入'
     )
     
     parser.add_argument(
         '--assigned-worker',
-        help='JSON格式的員工分配'
+        help='JSON格式的技師分配'
     )
     
     parser.add_argument(
         '--worker-type',
-        help='JSON格式的員工類型'
+        help='JSON格式的技師類型'
     )
     
     args = parser.parse_args()

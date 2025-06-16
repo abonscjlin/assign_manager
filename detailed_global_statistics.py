@@ -6,7 +6,7 @@
 
 生成工作分配的詳細統計報告，包括：
 - 工作分配概況
-- 員工工作負載分析
+- 技師工作負載分析
 - 難度分佈統計
 - 優先權完成分析
 - 整體效率分析
@@ -81,7 +81,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
         unassigned_tasks: 未分配工作數
         assignment_rate: 分配成功率
         work_data: 外部工作數據（可選）
-        employee_data: 外部員工數據（可選）
+        employee_data: 外部技師數據（可選）
     """
     
     # 使用策略管理器獲取統一的統計信息
@@ -89,7 +89,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     strategy_manager = get_strategy_manager(work_data=work_data, employee_data=employee_data)
     strategy_summary = strategy_manager.get_strategy_summary()
     
-    # 使用 StrategyManager 的統一員工名單提取邏輯
+    # 使用 StrategyManager 的統一技師名單提取邏輯
     senior_workers, junior_workers = strategy_manager.get_employee_lists()
     
     report_lines = []
@@ -107,19 +107,19 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     report_lines.append(f"| 已分配工作 | {assigned_tasks} 件 | {assignment_rate:.1f}% |")
     report_lines.append(f"| 未分配工作 | {unassigned_tasks} 件 | {(unassigned_tasks/total_tasks)*100:.1f}% |")
     
-    # === 員工類型分配統計 ===
+    # === 技師類型分配統計 ===
     senior_tasks = len(assigned_df[assigned_df['worker_type'] == 'SENIOR'])
     junior_tasks = len(assigned_df[assigned_df['worker_type'] == 'JUNIOR'])
     
-    report_lines.append("\n👥 【員工類型分配】")
-    report_lines.append("| 員工類型 | 分配數量 | 占比 |")
+    report_lines.append("\n👥 【技師類型分配】")
+    report_lines.append("| 技師類型 | 分配數量 | 占比 |")
     report_lines.append("|---------|--------:|-----:|")
-    report_lines.append(f"| 資深員工 | {senior_tasks} 件 | {(senior_tasks/assigned_tasks)*100:.1f}% |")
-    report_lines.append(f"| 一般員工 | {junior_tasks} 件 | {(junior_tasks/assigned_tasks)*100:.1f}% |")
+    report_lines.append(f"| 資深技師 | {senior_tasks} 件 | {(senior_tasks/assigned_tasks)*100:.1f}% |")
+    report_lines.append(f"| 一般技師 | {junior_tasks} 件 | {(junior_tasks/assigned_tasks)*100:.1f}% |")
     
-    # === 資深員工工作負載 ===
-    report_lines.append("\n⚡ 【資深員工工作負載】")
-    report_lines.append("| 員工編號 | 工作時間 | 利用率 | 工作數 |")
+    # === 資深技師工作負載 ===
+    report_lines.append("\n⚡ 【資深技師工作負載】")
+    report_lines.append("| 技師編號 | 工作時間 | 利用率 | 工作數 |")
     report_lines.append("|----------|--------:|-------:|-------:|")
     
     senior_workloads = {}
@@ -137,9 +137,9 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     senior_count = len(senior_workers)
     report_lines.append(f"| **平均** | **{avg_senior_workload:.0f}分鐘** | **{avg_senior_utilization:.1f}%** | **{senior_tasks/senior_count:.1f}件** |")
     
-    # === 一般員工工作負載 ===
-    report_lines.append("\n⚡ 【一般員工工作負載】")
-    report_lines.append("| 員工編號 | 工作時間 | 利用率 | 工作數 |")
+    # === 一般技師工作負載 ===
+    report_lines.append("\n⚡ 【一般技師工作負載】")
+    report_lines.append("| 技師編號 | 工作時間 | 利用率 | 工作數 |")
     report_lines.append("|----------|--------:|-------:|-------:|")
     
     junior_workloads = {}
@@ -159,7 +159,7 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     
     # === 難度分佈分析 ===
     report_lines.append("\n🎯 【難度分佈統計】")
-    report_lines.append("| 難度 | 總數量 | 資深員工 | 一般員工 | 資深占比 |")
+    report_lines.append("| 難度 | 總數量 | 資深技師 | 一般技師 | 資深占比 |")
     report_lines.append("|:----:|-------:|---------:|---------:|---------:|")
     
     difficulty_stats = {}
@@ -206,11 +206,11 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     report_lines.append("\n⚡ 【整體效率分析】")
     report_lines.append("| 效率指標 | 數值 | 說明 |")
     report_lines.append("|----------|-----:|------|")
-    report_lines.append(f"| 資深員工利用率 | {strategy_summary['senior_utilization']*100:.1f}% | 資深員工工時使用效率 |")
-    report_lines.append(f"| 一般員工利用率 | {strategy_summary['junior_utilization']*100:.1f}% | 一般員工工時使用效率 |")
+    report_lines.append(f"| 資深技師利用率 | {strategy_summary['senior_utilization']*100:.1f}% | 資深技師工時使用效率 |")
+    report_lines.append(f"| 一般技師利用率 | {strategy_summary['junior_utilization']*100:.1f}% | 一般技師工時使用效率 |")
     report_lines.append(f"| 整體利用率 | {strategy_summary['overall_utilization']*100:.1f}% | 整體工時使用效率 |")
-    report_lines.append(f"| 剩餘資深員工時間 | {strategy_summary['leftover_senior']:,} 分鐘 | 資深員工剩餘工作時間 |")
-    report_lines.append(f"| 剩餘一般員工時間 | {strategy_summary['leftover_junior']:,} 分鐘 | 一般員工剩餘工作時間 |")
+    report_lines.append(f"| 剩餘資深技師時間 | {strategy_summary['leftover_senior']:,} 分鐘 | 資深技師剩餘工作時間 |")
+    report_lines.append(f"| 剩餘一般技師時間 | {strategy_summary['leftover_junior']:,} 分鐘 | 一般技師剩餘工作時間 |")
     total_remaining = strategy_summary['leftover_senior'] + strategy_summary['leftover_junior']
     report_lines.append(f"| 總剩餘工時 | {total_remaining:,} 分鐘 | 約 {total_remaining/60:.1f} 小時的餘裕 |")
     
@@ -251,12 +251,12 @@ def generate_report_content(df, assigned_df, total_tasks, assigned_tasks, unassi
     if resource_utilization >= 95:
         report_lines.append(f"   • 資源利用率極高 - {resource_utilization:.1f}%的工時使用效率")
     if workload_balance >= 80:
-        report_lines.append("   • 工作負載分配均衡 - 員工工作量分配合理")
+        report_lines.append("   • 工作負載分配均衡 - 技師工作量分配合理")
     
     report_lines.append("\n⚠️ 改進建議:")
     if unassigned_tasks > 0:
         report_lines.append(f"   • 仍有{unassigned_tasks}件工作未分配，建議考慮:")
-        report_lines.append("     - 增加工作時間或員工數量")
+        report_lines.append("     - 增加工作時間或技師數量")
         report_lines.append("     - 調整工作難度評估")
         report_lines.append("     - 優化分配算法")
     
@@ -294,7 +294,7 @@ def generate_detailed_statistics(work_data=None, employee_data=None, result_file
     
     Args:
         work_data: 工作數據 DataFrame，如果為 None 則讀取本地 CSV
-        employee_data: 員工數據，如果為 None 則讀取本地 CSV
+        employee_data: 技師數據，如果為 None 則讀取本地 CSV
         result_file: 結果文件路徑，如果為 None 則使用默認路徑
     """
     

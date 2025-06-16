@@ -5,7 +5,7 @@
 ============================
 
 提供外部呼叫的RESTful API接口，支援：
-1. 工作清單和員工清單的外部輸入
+1. 工作清單和技師清單的外部輸入
 2. 自動工作分配計算
 3. 結果輸出（包含原始資料 + 分配結果）
 
@@ -96,7 +96,7 @@ class WorkAssignmentAPI:
         return True, "Work list data format is correct"
     
     def validate_employee_data(self, employee_data):
-        """驗證員工清單資料格式"""
+        """驗證技師清單資料格式"""
         if not isinstance(employee_data, list) or len(employee_data) == 0:
             return False, "Employee list must be a non-empty array"
         
@@ -116,12 +116,12 @@ class WorkAssignmentAPI:
             if missing_fields:
                 return False, f"Employee item {i+1} is missing fields: {', '.join(missing_fields)}"
             
-            # 驗證員工類型
+            # 驗證技師類型
             emp_type = employee.get('type', '').upper()
             if emp_type not in ['SENIOR', 'JUNIOR']:
                 return False, f"Employee item {i+1} type must be SENIOR or JUNIOR"
             
-            # 統計員工數量
+            # 統計技師數量
             if emp_type == 'SENIOR':
                 senior_count += 1
             else:
@@ -142,7 +142,7 @@ class WorkAssignmentAPI:
             work_df = pd.DataFrame(work_data)
             
             logger.info(f"開始工作分配 - 工作數量: {len(work_df)}")
-            logger.info(f"員工數量: {len(employee_data)}人")
+            logger.info(f"技師數量: {len(employee_data)}人")
             
             # 使用重構後的分配函數
             result_df, senior_workloads, junior_workloads = assign_workers_to_tasks(
@@ -274,11 +274,11 @@ def assign_work():
                 'error': 'Request data cannot be empty'
             }), 400
         
-        # 提取工作清單和員工清單 (支援兩種參數格式)
+        # 提取工作清單和技師清單 (支援兩種參數格式)
         work_list = request_data.get('work_list', request_data.get('work_data', []))
         employee_list = request_data.get('employee_list', request_data.get('employee_data', []))
         
-        # 提取外部員工數量參數 (可選)
+        # 提取外部技師數量參數 (可選)
         external_senior_count = request_data.get('senior_workers_count')
         external_junior_count = request_data.get('junior_workers_count')
         
@@ -290,7 +290,7 @@ def assign_work():
                 'error': f'Work list format error: {message}'
             }), 400
         
-        # 驗證員工清單
+        # 驗證技師清單
         valid, message = api_handler.validate_employee_data(employee_list)
         if not valid:
             return jsonify({
@@ -298,9 +298,9 @@ def assign_work():
                 'error': f'Employee list format error: {message}'
             }), 400
         
-        logger.info(f"收到工作分配請求 - 工作數量: {len(work_list)}, 員工數量: {len(employee_list)}")
+        logger.info(f"收到工作分配請求 - 工作數量: {len(work_list)}, 技師數量: {len(employee_list)}")
         
-        # 執行工作分配 (支持外部員工數量參數)
+        # 執行工作分配 (支持外部技師數量參數)
         result = api_handler.process_assignment(work_list, employee_list, external_senior_count, external_junior_count)
         
         if result['success']:
@@ -341,7 +341,7 @@ def process_assignment_legacy():
                 'error': 'Request data cannot be empty'
             }), 400
         
-        # 提取工作清單和員工清單 (統一格式)
+        # 提取工作清單和技師清單 (統一格式)
         work_list = request_data.get('work_list', [])
         employee_list = request_data.get('employee_list', [])
         
@@ -383,7 +383,7 @@ def process_assignment_legacy():
                     'error': f'Work item {i+1} is missing fields: {", ".join(missing_fields)}'
                 }), 400
         
-        # 檢查員工數據必要欄位  
+        # 檢查技師數據必要欄位  
         for i, emp in enumerate(employee_list):
             if 'id' not in emp or 'type' not in emp:
                 return jsonify({
@@ -396,7 +396,7 @@ def process_assignment_legacy():
                     'error': f'Employee item {i+1} type must be SENIOR or JUNIOR'
                 }), 400
         
-        logger.info(f"收到工作分配請求 (統一格式) - 工作數量: {len(work_list)}, 員工數量: {len(employee_list)}")
+        logger.info(f"收到工作分配請求 (統一格式) - 工作數量: {len(work_list)}, 技師數量: {len(employee_list)}")
         
         # 直接調用重構後的分配函數
         work_df = pd.DataFrame(work_list)
@@ -504,7 +504,7 @@ def test_with_csv():
         work_df = pd.read_csv(work_file_path)
         work_list = work_df.to_dict('records')
         
-        # 讀取員工清單CSV
+        # 讀取技師清單CSV
         employee_manager = EmployeeManager()
         try:
             employee_manager.load_employee_list_from_csv()
@@ -530,7 +530,7 @@ def test_with_csv():
                 'error': f'Failed to read employee list: {str(e)}'
             }), 400
         
-        logger.info(f"使用CSV檔案測試 - 工作檔案: {work_file}, 員工檔案: {employee_file}")
+        logger.info(f"使用CSV檔案測試 - 工作檔案: {work_file}, 技師檔案: {employee_file}")
         
         # 執行工作分配
         result = api_handler.process_assignment(work_list, employee_list)

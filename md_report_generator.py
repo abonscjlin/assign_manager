@@ -61,7 +61,7 @@ class MDReportGenerator:
         total_tasks = len(df)
         assigned_tasks = len(df[df['assigned_worker'] != 'UNASSIGNED'])
         
-        # 按員工類型統計
+        # 按技師類型統計
         senior_tasks = len(df[df['worker_type'] == 'SENIOR'])
         junior_tasks = len(df[df['worker_type'] == 'JUNIOR'])
         
@@ -90,7 +90,7 @@ class MDReportGenerator:
                 'rate': (assigned / total * 100) if total > 0 else 0
             }
         
-        # 按員工工作負載統計
+        # 按技師工作負載統計
         worker_stats = df[df['assigned_worker'] != 'UNASSIGNED'].groupby(['assigned_worker', 'worker_type']).agg({
             'measure_record_oid': 'count',
             'estimated_time': 'sum'
@@ -113,7 +113,7 @@ class MDReportGenerator:
         """生成完整的MD格式報告"""
         self.collect_data()
         
-        # 載入真實員工數量
+        # 載入真實技師數量
         actual_senior_count, actual_junior_count = get_actual_employee_counts()
         
         # 生成報告標題
@@ -129,18 +129,18 @@ class MDReportGenerator:
 ## 執行概覽
 
 ### 系統配置
-- **資深員工數量：** {actual_senior_count} 人
-- **一般員工數量：** {actual_junior_count} 人
+- **資深技師數量：** {actual_senior_count} 人
+- **一般技師數量：** {actual_junior_count} 人
 - **最低工作目標：** {MINIMUM_WORK_TARGET} 件
 - **每人日工時：** 8 小時 (480 分鐘)
 
 ### 工作時間配置
 
-#### 資深員工完成時間 (分鐘)
+#### 資深技師完成時間 (分鐘)
 | 難度等級 | 完成時間 | 難度等級 | 完成時間 | 難度等級 | 完成時間 |
 |:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|"""
 
-        # 添加資深員工時間配置表格
+        # 添加資深技師時間配置表格
         senior_time_items = list(SENIOR_TIME.items())
         for i in range(0, len(senior_time_items), 3):
             row_items = senior_time_items[i:i+3]
@@ -157,11 +157,11 @@ class MDReportGenerator:
 
         md += f"""
 
-#### 一般員工完成時間 (分鐘)
+#### 一般技師完成時間 (分鐘)
 | 難度等級 | 完成時間 | 難度等級 | 完成時間 | 難度等級 | 完成時間 |
 |:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|"""
 
-        # 添加一般員工時間配置表格
+        # 添加一般技師時間配置表格
         junior_time_items = list(JUNIOR_TIME.items())
         for i in range(0, len(junior_time_items), 3):
             row_items = junior_time_items[i:i+3]
@@ -180,9 +180,9 @@ class MDReportGenerator:
 
 #### 時間配置說明
 - **難度定義：** 1為最簡單（{SENIOR_TIME[1]}分鐘），{max(SENIOR_TIME.keys())}為最難（{SENIOR_TIME[max(SENIOR_TIME.keys())]}分鐘）
-- **效率比例：** 一般員工完成時間為資深員工的1.5倍
-- **低難度工作：** 難度6-9（適合一般員工優先處理）
-- **高難度工作：** 難度1-5（需要資深員工處理）
+- **效率比例：** 一般技師完成時間為資深技師的1.5倍
+- **低難度工作：** 難度6-9（適合一般技師優先處理）
+- **高難度工作：** 難度1-5（需要資深技師處理）
 
 ### 關鍵績效指標 (KPI)
 
@@ -208,12 +208,12 @@ class MDReportGenerator:
 
 ## 工作分配分析
 
-### 員工類型分配統計
+### 技師類型分配統計
 
-| 員工類型 | 分配數量 | 占比 |
+| 技師類型 | 分配數量 | 占比 |
 |---------|--------:|-----:|"""
 
-        # 添加員工分配統計
+        # 添加技師分配統計
         if 'df' in self.report_data:
             df = self.report_data['df']
             assigned_df = df[df['assigned_worker'] != 'UNASSIGNED']
@@ -227,8 +227,8 @@ class MDReportGenerator:
                 junior_pct = (junior_count / total_assigned) * 100
                 
                 md += f"""
-| 資深員工 | {senior_count} 件 | {senior_pct:.1f}% |
-| 一般員工 | {junior_count} 件 | {junior_pct:.1f}% |
+| 資深技師 | {senior_count} 件 | {senior_pct:.1f}% |
+| 一般技師 | {junior_count} 件 | {junior_pct:.1f}% |
 | **總計** | **{total_assigned} 件** | **100.0%** |"""
 
         md += """
@@ -286,14 +286,14 @@ class MDReportGenerator:
 
 ---
 
-## 員工工作負載分析
+## 技師工作負載分析
 
-### 資深員工工作分配
+### 資深技師工作分配
 
-| 員工編號 | 工作數量 | 工作時間 | 利用率 |
+| 技師編號 | 工作數量 | 工作時間 | 利用率 |
 |----------|--------:|--------:|-------:|"""
 
-        # 添加資深員工分析
+        # 添加資深技師分析
         if 'df' in self.report_data:
             df = self.report_data['df']
             senior_df = df[df['worker_type'] == 'SENIOR']
@@ -314,12 +314,12 @@ class MDReportGenerator:
 
         md += """
 
-### 一般員工工作分配
+### 一般技師工作分配
 
-| 員工編號 | 工作數量 | 工作時間 | 利用率 |
+| 技師編號 | 工作數量 | 工作時間 | 利用率 |
 |----------|--------:|--------:|-------:|"""
 
-        # 添加一般員工分析
+        # 添加一般技師分析
         if 'df' in self.report_data:
             df = self.report_data['df']
             junior_df = df[df['worker_type'] == 'JUNIOR']
@@ -359,10 +359,10 @@ class MDReportGenerator:
                 # 如果有額外的人力增加，可能會超過最低目標
                 additional_capacity_estimate = 0
                 if result.get('senior_add', 0) > 0:
-                    # 資深員工每天可處理約16件工作（480分鐘/30分鐘平均）
+                    # 資深技師每天可處理約16件工作（480分鐘/30分鐘平均）
                     additional_capacity_estimate += result.get('senior_add', 0) * 16
                 if result.get('junior_add', 0) > 0:
-                    # 一般員工每天可處理約12件工作（480分鐘/40分鐘平均）
+                    # 一般技師每天可處理約12件工作（480分鐘/40分鐘平均）
                     additional_capacity_estimate += result.get('junior_add', 0) * 12
                 
                 # 保守估計，只計算達成目標所需的工作量
@@ -379,8 +379,8 @@ class MDReportGenerator:
 ### 推薦解決方案
 - **方案類型：** {result.get('type', '未知')}
 - **具體調整：**
-  - 資深員工：{actual_senior_count} → {actual_senior_count + result.get('senior_add', 0)} 人 (+{result.get('senior_add', 0)}人)
-  - 一般員工：{actual_junior_count} → {actual_junior_count + result.get('junior_add', 0)} 人 (+{result.get('junior_add', 0)}人)
+  - 資深技師：{actual_senior_count} → {actual_senior_count + result.get('senior_add', 0)} 人 (+{result.get('senior_add', 0)}人)
+  - 一般技師：{actual_junior_count} → {actual_junior_count + result.get('junior_add', 0)} 人 (+{result.get('junior_add', 0)}人)
 - **預期效果：** {result.get('description', '無描述')}
 - **預期完成工作：** {final_expected} 件（{'✅ ' if final_expected >= MINIMUM_WORK_TARGET else '⚠️ '}{'達成目標' if final_expected >= MINIMUM_WORK_TARGET else '仍未達標'}）
 - **成本影響：** {result.get('cost_factor', 0):.1f} 個成本單位

@@ -46,7 +46,7 @@ def test_get_config():
             print(f"   最低工作目標: {config['minimum_work_target']} 件")
             print(f"   每人日工時: {config['work_hours_per_day']} 分鐘")
             print(f"   必要工作欄位數: {len(config['required_work_fields'])}")
-            print(f"   必要員工欄位數: {len(config['required_employee_fields'])}")
+            print(f"   必要技師欄位數: {len(config['required_employee_fields'])}")
             return True
         else:
             print(f"❌ 配置取得失敗: {response.status_code}")
@@ -86,7 +86,7 @@ def create_sample_data():
         }
         work_list.append(work)
     
-    # 建立員工清單樣本
+    # 建立技師清單樣本
     employee_list = [
         {"id": "chen.minghua", "type": "SENIOR"},
         {"id": "li.jianguo", "type": "SENIOR"},
@@ -115,7 +115,7 @@ def test_work_assignment():
     
     try:
         # 發送API請求
-        print(f"📤 發送請求: {len(work_list)}筆工作, {len(employee_list)}名員工")
+        print(f"📤 發送請求: {len(work_list)}筆工作, {len(employee_list)}名技師")
         response = requests.post(
             f"{API_BASE_URL}/api/assign",
             json=request_data,
@@ -134,15 +134,15 @@ def test_work_assignment():
                 print(f"   已分配: {stats['assigned_tasks']}")
                 print(f"   未分配: {stats['unassigned_tasks']}")
                 print(f"   分配率: {stats['assignment_rate']}%")
-                print(f"   資深員工: {stats['senior_workers']}人")
-                print(f"   一般員工: {stats['junior_workers']}人")
+                print(f"   資深技師: {stats['senior_workers']}人")
+                print(f"   一般技師: {stats['junior_workers']}人")
                 
-                # 顯示員工工作量
-                print(f"👨‍💼 資深員工工作量:")
+                # 顯示技師工作量
+                print(f"👨‍💼 資深技師工作量:")
                 for name, workload in stats['senior_workloads'].items():
                     print(f"   {name}: {workload}分鐘")
                 
-                print(f"👩‍💼 一般員工工作量:")
+                print(f"👩‍💼 一般技師工作量:")
                 for name, workload in stats['junior_workloads'].items():
                     print(f"   {name}: {workload}分鐘")
                 
@@ -237,8 +237,8 @@ def test_error_handling():
     else:
         print("   ❌ 空工作清單錯誤處理異常")
     
-    # 測試無效員工類型
-    print("   測試無效員工類型...")
+    # 測試無效技師類型
+    print("   測試無效技師類型...")
     work_list, _ = create_sample_data()
     response = requests.post(
         f"{API_BASE_URL}/api/assign",
@@ -250,10 +250,10 @@ def test_error_handling():
     )
     
     if response.status_code == 400:
-        print("   ✅ 無效員工類型錯誤處理正確")
+        print("   ✅ 無效技師類型錯誤處理正確")
         success_count += 1
     else:
-        print("   ❌ 無效員工類型錯誤處理異常")
+        print("   ❌ 無效技師類型錯誤處理異常")
     
     print("✅ 錯誤處理測試完成")
     return success_count == total_tests

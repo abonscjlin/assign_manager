@@ -459,9 +459,9 @@ result = manager.advanced_optimal_strategy_analysis(**custom_params)
 
 ### 多策略比較
 支持4種不同的人力配置策略：
-- **senior_only**：優先增加資深員工
-- **junior_only**：優先增加一般員工
-- **balanced**：平衡增加兩種員工
+- **senior_only**：優先增加資深技師
+- **junior_only**：優先增加一般技師
+- **balanced**：平衡增加兩種技師
 - **cost_optimal**：成本最優策略
 
 ### API 接口
@@ -546,25 +546,25 @@ A: 檢查以下項目：
 
 ```python
 # 預設人力配置
-SENIOR_WORKERS = 5      # 資深員工人數
-JUNIOR_WORKERS = 10     # 一般員工人數
+SENIOR_WORKERS = 5      # 資深技師人數
+JUNIOR_WORKERS = 10     # 一般技師人數
 
 # 成本權重設定（在 incremental_workforce_calculator.py 中定義）
-senior_cost_weight = 1.5    # 資深員工成本權重
-junior_cost_weight = 1.0    # 一般員工成本權重
+senior_cost_weight = 1.5    # 資深技師成本權重
+junior_cost_weight = 1.0    # 一般技師成本權重
 ```
 
 ### 成本計算邏輯
 
 #### 1. 基礎成本計算
 ```
-基礎成本 = (資深員工人數 × 資深成本權重) + (一般員工人數 × 一般成本權重)
+基礎成本 = (資深技師人數 × 資深成本權重) + (一般技師人數 × 一般成本權重)
 基礎成本 = (5 × 1.5) + (10 × 1.0) = 7.5 + 10 = 17.5 單位
 ```
 
 #### 2. 新配置成本計算
 ```
-新配置成本 = (新資深員工人數 × 資深成本權重) + (新一般員工人數 × 一般成本權重)
+新配置成本 = (新資深技師人數 × 資深成本權重) + (新一般技師人數 × 一般成本權重)
 
 例如推薦配置 9資深 + 10一般：
 新配置成本 = (9 × 1.5) + (10 × 1.0) = 13.5 + 10 = 23.5 單位
@@ -608,13 +608,13 @@ cost_increase_percentage = (cost_increase / base_cost) * 100 if base_cost > 0 el
 ```
 
 **關鍵要點：**
-- 雖然只增加4名資深員工，但由於資深員工成本權重較高（1.5倍）
+- 雖然只增加4名資深技師，但由於資深技師成本權重較高（1.5倍）
 - 相對於基礎成本17.5單位，6.0單位的增加確實達到34.3%
 - 這個百分比反映的是相對成本增加，而非絕對人數增加比例
 
 ## ⏱️ 工作時間配置
 
-### 資深員工作業時間（分鐘）
+### 資深技師作業時間（分鐘）
 ```python
 SENIOR_TIME = {
     1: 60,  # 難度1：60分鐘
@@ -627,9 +627,9 @@ SENIOR_TIME = {
 }
 ```
 
-### 一般員工作業時間
+### 一般技師作業時間
 ```python
-# 一般員工需要1.5倍時間
+# 一般技師需要1.5倍時間
 JUNIOR_TIME = {k: int(v * 1.5) for k, v in SENIOR_TIME.items()}
 ```
 
@@ -637,12 +637,12 @@ JUNIOR_TIME = {k: int(v * 1.5) for k, v in SENIOR_TIME.items()}
 
 | 參數 | 預設值 | 說明 | 位置 |
 |------|--------|------|------|
-| SENIOR_WORKERS | 5 | 資深員工人數 | config_params.py |
-| JUNIOR_WORKERS | 10 | 一般員工人數 | config_params.py |
+| SENIOR_WORKERS | 5 | 資深技師人數 | config_params.py |
+| JUNIOR_WORKERS | 10 | 一般技師人數 | config_params.py |
 | WORK_HOURS_PER_DAY | 480 | 每人每日工時（分鐘）| config_params.py |
 | MINIMUM_WORK_TARGET | 300 | 每日最低工作完成目標 | config_params.py |
-| senior_cost_weight | 1.5 | 資深員工成本權重 | incremental_workforce_calculator.py |
-| junior_cost_weight | 1.0 | 一般員工成本權重 | incremental_workforce_calculator.py |
+| senior_cost_weight | 1.5 | 資深技師成本權重 | incremental_workforce_calculator.py |
+| junior_cost_weight | 1.0 | 一般技師成本權重 | incremental_workforce_calculator.py |
 
 ## 🔧 重要注意事項
 
