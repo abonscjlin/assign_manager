@@ -135,18 +135,12 @@ dmypy.json
 result/
 *.csv
 *.txt
-*.md
 
 # 但保留範例和配置文件
 result.csv
 !README.md
 !setup.py
 
-# 生成的報告文件（包含時間戳）
-工作分配分析報告_*.md
-assignment_summary_*.txt
-detailed_statistics_report_*.txt
-workforce_requirements_analysis_*.txt
 
 # 臨時數據文件
 temp_*.csv
