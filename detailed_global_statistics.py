@@ -332,8 +332,12 @@ def generate_detailed_statistics(work_data=None, employee_data=None, result_file
     
     return summary_data, report_lines
 
-def main():
-    """主函數"""
+def main(timestamp=None):
+    """主函數
+    
+    Args:
+        timestamp: 可選的時間戳，用於文件命名
+    """
     # 執行統計分析
     print("生成詳細統計報告...")
     stats, report_lines = generate_detailed_statistics()
@@ -342,8 +346,11 @@ def main():
         print("❌ 統計分析失敗")
         return None
 
-    # 保存完整的詳細報告到文件
-    report_file = get_result_file_path('detailed_statistics_report.txt')
+    # 生成文件名（支持時間戳）
+    if timestamp:
+        report_file = get_result_file_path(f'detailed_statistics_report_{timestamp}.txt')
+    else:
+        report_file = get_result_file_path('detailed_statistics_report.txt')
     
     with open(report_file, 'w', encoding='utf-8') as f:
         # 寫入完整的報告內容

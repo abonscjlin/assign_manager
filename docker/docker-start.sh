@@ -232,6 +232,23 @@ build_image() {
     log_success "Docker映像構建完成"
 }
 
+# 強制更新代碼並重新構建
+force_update() {
+    log_info "強制更新代碼並重新構建..."
+    
+    # 停止現有容器
+    $DOCKER_COMPOSE_CMD down
+    
+    # 刪除代碼volume以確保完全重新克隆
+    $DOCKER_CMD volume rm docker_assign_manager_code 2>/dev/null || true
+    
+    # 重新構建映像（不使用緩存）
+    build_image
+    
+    # 啟動服務
+    start_service
+}
+
 # 快速構建Docker映像（不清除緩存）
 build_image_fast() {
     log_info "快速構建Docker映像..."
@@ -537,7 +554,8 @@ main() {
             build_image_fast
             ;;
         "update")
-            update_code
+            check_dependencies
+            force_update
             ;;
         "rebuild")
             check_dependencies

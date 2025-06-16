@@ -41,14 +41,16 @@ app = Flask(__name__)
 CORS(app)  # 允許跨域請求
 
 def create_date_result_directory():
-    """創建按日期分組的結果目錄"""
-    today = datetime.now().strftime("%Y%m%d")
+    """創建按日期分組的結果目錄並返回時間戳"""
+    now = datetime.now()
+    today = now.strftime("%Y%m%d")
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     date_result_dir = os.path.join(script_dir, "result", today)
     os.makedirs(date_result_dir, exist_ok=True)
-    return date_result_dir
+    return date_result_dir, timestamp
 
-def generate_reports_for_api(work_data, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir):
+def generate_reports_for_api(work_data, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir, timestamp):
     """生成完整的分析報告（重用main_manager邏輯）"""
     try:
         # 導入所需模組
@@ -57,55 +59,54 @@ def generate_reports_for_api(work_data, employee_data, result_df, senior_workloa
         import direct_calculation
         from md_report_generator import generate_md_report
         
-        # 生成詳細統計報告
-        stats, report_lines = detailed_global_statistics.generate_detailed_statistics(
-            work_data=work_data, 
-            employee_data=employee_data
-        )
-        
-        if stats and report_lines:
-            # 保存詳細統計報告
-            report_file = os.path.join(date_result_dir, 'detailed_statistics_report.txt')
-            with open(report_file, 'w', encoding='utf-8') as f:
-                for line in report_lines:
-                    f.write(line + '\n')
-            logger.info(f"詳細統計報告已保存到: {report_file}")
-        
-        # 生成最終建議報告（需要先保存結果到臨時文件）
-        temp_result_file = os.path.join(date_result_dir, 'temp_result.csv')
-        result_df.to_csv(temp_result_file, index=False, encoding='utf-8')
-        
         # 切換工作目錄以使用現有的報告生成邏輯
         original_cwd = os.getcwd()
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         os.chdir(script_dir)
         
         try:
-            # 生成人力需求分析
-            result = direct_calculation.direct_workforce_calculation()
-            if result:
-                # 移動生成的文件到日期目錄
-                source_file = os.path.join(script_dir, "result", "workforce_requirements_analysis.txt")
-                if os.path.exists(source_file):
-                    dest_file = os.path.join(date_result_dir, "workforce_requirements_analysis.txt")
-                    import shutil
-                    shutil.move(source_file, dest_file)
-                    logger.info(f"人力需求分析報告已保存到: {dest_file}")
+            # 首先保存結果到項目根目錄，讓其他模組可以讀取
+            temp_result_file = os.path.join(script_dir, 'result', 'result_with_assignments.csv')
+            os.makedirs(os.path.dirname(temp_result_file), exist_ok=True)
+            result_df.to_csv(temp_result_file, index=False, encoding='utf-8')
             
-            # 生成MD格式報告
+            # 1. 生成詳細統計報告（直接調用main函數）
+            detailed_global_statistics.main(timestamp)
+            
+            # 移動生成的文件到日期目錄
+            source_detailed_file = os.path.join(script_dir, 'result', f'detailed_statistics_report_{timestamp}.txt')
+            if os.path.exists(source_detailed_file):
+                dest_detailed_file = os.path.join(date_result_dir, f'detailed_statistics_report_{timestamp}.txt')
+                import shutil
+                shutil.move(source_detailed_file, dest_detailed_file)
+                logger.info(f"詳細統計報告已保存到: {dest_detailed_file}")
+            
+            # 2. 生成人力需求分析（直接調用函數並指定時間戳）
+            direct_calculation.direct_workforce_calculation(timestamp)
+            
+            # 移動生成的文件到日期目錄
+            source_workforce_file = os.path.join(script_dir, 'result', f'workforce_requirements_analysis_{timestamp}.txt')
+            if os.path.exists(source_workforce_file):
+                dest_workforce_file = os.path.join(date_result_dir, f'workforce_requirements_analysis_{timestamp}.txt')
+                import shutil
+                shutil.move(source_workforce_file, dest_workforce_file)
+                logger.info(f"人力需求分析報告已保存到: {dest_workforce_file}")
+            
+            # 3. 生成MD格式報告
             md_file_path = generate_md_report(script_dir)
             if md_file_path:
-                # 移動MD報告到日期目錄
+                # 移動MD報告到日期目錄，使用統一時間戳重命名
                 import shutil
-                dest_md_file = os.path.join(date_result_dir, os.path.basename(md_file_path))
+                dest_md_file = os.path.join(date_result_dir, f"工作分配分析報告_{timestamp}.md")
                 shutil.move(md_file_path, dest_md_file)
                 logger.info(f"MD格式報告已保存到: {dest_md_file}")
             
-        finally:
-            os.chdir(original_cwd)
             # 清理臨時文件
             if os.path.exists(temp_result_file):
                 os.remove(temp_result_file)
+            
+        finally:
+            os.chdir(original_cwd)
         
         return True
         
@@ -247,20 +248,21 @@ class WorkAssignmentAPI:
             extra_cols = [col for col in result_df.columns if col not in ordered_cols]
             final_cols = ordered_cols + extra_cols
             
-            # 創建按日期分組的結果目錄
-            date_result_dir = create_date_result_directory()
+            # 創建按日期分組的結果目錄並獲取時間戳
+            date_result_dir, timestamp = create_date_result_directory()
             
-            # 保存分配結果CSV
-            result_file = os.path.join(date_result_dir, 'result_with_assignments.csv')
+            # 保存分配結果CSV（添加時間戳）
+            result_file = os.path.join(date_result_dir, f'result_with_assignments_{timestamp}.csv')
             result_df[final_cols].to_csv(result_file, index=False, encoding='utf-8')
             logger.info(f"分配結果已保存到: {result_file}")
             
-            # 保存統計摘要
-            summary_file = os.path.join(date_result_dir, 'assignment_summary.txt')
+            # 保存統計摘要（添加時間戳）
+            summary_file = os.path.join(date_result_dir, f'assignment_summary_{timestamp}.txt')
             with open(summary_file, 'w', encoding='utf-8') as f:
                 f.write("工作分配統計摘要\n")
                 f.write("="*50 + "\n")
-                f.write(f"生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"生成時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"時間戳: {timestamp}\n\n")
                 f.write(f"基本統計:\n")
                 f.write(f"  總工作數量: {len(work_data)} 件\n")
                 f.write(f"  已分配工作: {assigned_count} 件\n")
@@ -272,7 +274,7 @@ class WorkAssignmentAPI:
             
             # 如果需要生成完整報告
             if generate_reports:
-                generate_reports_for_api(work_df, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir)
+                generate_reports_for_api(work_df, employee_data, result_df, senior_workloads, junior_workloads, date_result_dir, timestamp)
             
             # 轉換回原始格式（按指定順序）
             result_data = result_df[final_cols].to_dict('records')
@@ -305,7 +307,12 @@ class WorkAssignmentAPI:
                         'junior_workers_source': 'external_api' if external_junior_count is not None else 'employee_list'
                     }
                 },
-                'result_directory': date_result_dir
+                'result_directory': date_result_dir,
+                'timestamp': timestamp,
+                'result_files': {
+                    'assignment_result': f'result_with_assignments_{timestamp}.csv',
+                    'summary': f'assignment_summary_{timestamp}.txt'
+                }
             }
             
         except Exception as e:
@@ -419,12 +426,22 @@ def assign_work():
                 'data': result['data'],
                 'statistics': result['statistics'],
                 'result_directory': result.get('result_directory', ''),
+                'result_files': result.get('result_files', {}),
+                'file_timestamp': result.get('timestamp', ''),
                 'message': 'Work assignment completed',
                 'timestamp': datetime.now().isoformat()
             }
             
             if generate_reports:
                 response['message'] += ' with full reports generated'
+                # 如果生成了完整報告，添加報告文件信息
+                file_timestamp = result.get('timestamp', '')
+                if file_timestamp:
+                    response['result_files'].update({
+                        'detailed_statistics': f'detailed_statistics_report_{file_timestamp}.txt',
+                        'workforce_analysis': f'workforce_requirements_analysis_{file_timestamp}.txt',
+                        'md_report': f'工作分配分析報告_{file_timestamp}.md'
+                    })
             
             return jsonify(response)
         else:
@@ -533,6 +550,8 @@ def test_with_csv():
                 'data': result['data'],
                 'statistics': result['statistics'],
                 'result_directory': result.get('result_directory', ''),
+                'result_files': result.get('result_files', {}),
+                'file_timestamp': result.get('timestamp', ''),
                 'message': 'CSV test completed successfully',
                 'timestamp': datetime.now().isoformat(),
                 'files_used': {
@@ -543,6 +562,14 @@ def test_with_csv():
             
             if generate_reports:
                 response['message'] += ' with full reports generated'
+                # 如果生成了完整報告，添加報告文件信息
+                file_timestamp = result.get('timestamp', '')
+                if file_timestamp:
+                    response['result_files'].update({
+                        'detailed_statistics': f'detailed_statistics_report_{file_timestamp}.txt',
+                        'workforce_analysis': f'workforce_requirements_analysis_{file_timestamp}.txt',
+                        'md_report': f'工作分配分析報告_{file_timestamp}.md'
+                    })
             
             return jsonify(response)
         else:

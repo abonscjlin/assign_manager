@@ -55,8 +55,12 @@ def calculate_required_time_for_gap(gap_count, df):
     
     return senior_time_needed, junior_time_needed, difficulty_distribution
 
-def direct_workforce_calculation():
-    """直接計算人力需求"""
+def direct_workforce_calculation(timestamp=None):
+    """直接計算人力需求
+    
+    Args:
+        timestamp: 可選的時間戳，用於文件命名
+    """
     
     # 創建字符串緩衝區來捕獲輸出
     output_buffer = io.StringIO()
@@ -98,7 +102,7 @@ def direct_workforce_calculation():
             print("\n🎉 當前配置已能達成目標！")
             # 即使達標也要保存文件
             output_content = output_buffer.getvalue()
-            save_to_file(output_content)
+            save_to_file(output_content, timestamp)
             return {'type': '當前配置足夠', 'senior_add': 0, 'junior_add': 0, 'cost_factor': 0, 'description': '現有人力已足夠'}
         
         # 計算處理缺口所需時間
@@ -280,7 +284,7 @@ def direct_workforce_calculation():
         if not valid_solutions:
             print("❌ 未找到有效的解決方案")
             output_content = output_buffer.getvalue()
-            save_to_file(output_content)
+            save_to_file(output_content, timestamp)
             return None
         
         # 按成本排序
@@ -330,20 +334,30 @@ def direct_workforce_calculation():
     print(output_content)
     
     # 保存到文件
-    save_to_file(output_content)
+    save_to_file(output_content, timestamp)
     
     return recommended if valid_solutions else None
 
-def save_to_file(content):
-    """將內容保存到workforce_requirements_analysis.txt文件"""
+def save_to_file(content, timestamp=None):
+    """將內容保存到workforce_requirements_analysis.txt文件
+    
+    Args:
+        content: 要保存的內容
+        timestamp: 可選的時間戳，用於文件命名
+    """
     try:
         # 確保result目錄存在
         script_dir = os.path.dirname(os.path.abspath(__file__))
         result_dir = os.path.join(script_dir, "result")
         os.makedirs(result_dir, exist_ok=True)
         
-        # 保存到文件
-        output_file = os.path.join(result_dir, "workforce_requirements_analysis.txt")
+        # 生成文件名（支持時間戳）
+        if timestamp:
+            filename = f"workforce_requirements_analysis_{timestamp}.txt"
+        else:
+            filename = "workforce_requirements_analysis.txt"
+        
+        output_file = os.path.join(result_dir, filename)
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(content)
         

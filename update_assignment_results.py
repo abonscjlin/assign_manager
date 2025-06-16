@@ -590,8 +590,12 @@ def assign_workers_with_json_input(assigned_worker_json: str = None, worker_type
     
     return df_sorted, senior_workload, junior_workload, assignment_result_json
 
-def main():
-    """主函數"""
+def main(timestamp=None):
+    """主函數
+    
+    Args:
+        timestamp: 可選的時間戳，用於文件命名
+    """
     # 執行分配
     print("開始執行工作分配...")
     updated_df, senior_workload, junior_workload = assign_workers_to_tasks()
@@ -599,8 +603,15 @@ def main():
     # 生成統計數據
     stats = generate_global_statistics(updated_df, senior_workload, junior_workload)
 
+    # 生成文件名（支持時間戳）
+    if timestamp:
+        output_filename = get_result_file_path(f'result_with_assignments_{timestamp}.csv')
+        summary_filename = get_result_file_path(f'assignment_summary_{timestamp}.txt')
+    else:
+        output_filename = get_result_file_path('result_with_assignments.csv')
+        summary_filename = get_result_file_path('assignment_summary.txt')
+
     # 儲存更新後的CSV
-    output_filename = get_result_file_path('result_with_assignments.csv')
     updated_df.to_csv(output_filename, index=False)
 
     print(f"\n" + "="*60)
@@ -612,11 +623,13 @@ def main():
     print("="*60)
 
     # 儲存統計摘要
-    summary_filename = get_result_file_path('assignment_summary.txt')
     with open(summary_filename, 'w', encoding='utf-8') as f:
         f.write("工作分配統計摘要\n")
         f.write("="*50 + "\n")
-        f.write(f"生成時間: {pd.Timestamp.now()}\n\n")
+        f.write(f"生成時間: {pd.Timestamp.now()}\n")
+        if timestamp:
+            f.write(f"時間戳: {timestamp}\n")
+        f.write("\n")
         
         f.write(f"基本統計:\n")
         f.write(f"  總工作數量: {stats['total_tasks']} 件\n")

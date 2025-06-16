@@ -1,7 +1,10 @@
 services:
   assign-manager-api:
     # 使用當前目錄的Dockerfile構建映像
-    build: .
+    build: 
+      context: .
+      args:
+        - REPO_URL=${REPO_URL:-https://github.com/abonscjlin/assign_manager.git}
     
     # 容器名稱
     container_name: assign-manager-api
@@ -15,13 +18,16 @@ services:
       - ~/docker/assign_manager/result:/app/result
       - ~/docker/assign_manager/employee_list.csv:/app/employee_list.csv:ro
       - ~/docker/assign_manager/result.csv:/app/result.csv:ro
+      # 掛載代碼存儲volume，以便在容器重啟時保持代碼狀態
+      - assign_manager_code:/app/.git
     
     # 環境變數
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Taipei
-      - REPO_URL=https://github.com/abonscjlin/assign_manager.git
+      - REPO_URL=${REPO_URL:-https://github.com/abonscjlin/assign_manager.git}
+      - GIT_BRANCH=${GIT_BRANCH:-main}
     
     # 重啟策略
     restart: unless-stopped
@@ -41,7 +47,9 @@ services:
         max-size: "10m"
         max-file: "3"
 
-# 可選：創建named volume用於數據持久化
+# 定義volumes用於數據持久化
 volumes:
   assign_manager_data:
+    driver: local
+  assign_manager_code:
     driver: local 
