@@ -40,13 +40,13 @@ log_info "📦 倉庫地址: $REPO_URL"
 update_code() {
     log_info "🔄 檢查並更新代碼..."
     
-    # 檢查是否已經有代碼目錄
-    if [ -d "/app/.git" ]; then
+    # 檢查是否已經有有效的Git倉庫
+    cd /app
+    if [ -d "/app/.git" ] && git rev-parse --git-dir >/dev/null 2>&1; then
         log_info "📂 發現現有代碼倉庫，嘗試更新..."
-        cd /app
         
         # 獲取當前分支
-        CURRENT_BRANCH=$(git branch --show-current)
+        CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
         if [ -z "$CURRENT_BRANCH" ]; then
             CURRENT_BRANCH="main"
         fi
@@ -54,43 +54,52 @@ update_code() {
         log_info "🌿 當前分支: $CURRENT_BRANCH"
         
         # 保存本地修改（如果有）
-        if ! git diff-index --quiet HEAD --; then
+        if ! git diff-index --quiet HEAD -- 2>/dev/null; then
             log_warning "⚠️ 發現本地修改，將暫存..."
-            git stash push -m "Auto-stash before container update $(date)"
+            git stash push -m "Auto-stash before container update $(date)" 2>/dev/null || true
         fi
         
         # 獲取遠程更新
         log_info "📥 獲取遠程更新..."
-        git fetch origin
+        if ! git fetch origin 2>/dev/null; then
+            log_warning "⚠️ 無法獲取遠程更新，可能網絡問題，繼續使用本地代碼"
+            log_info "📋 當前提交: $(git log --oneline -1 2>/dev/null || echo '無法獲取提交信息')"
+            return 0
+        fi
         
         # 檢查是否有更新
-        LOCAL_COMMIT=$(git rev-parse HEAD)
-        REMOTE_COMMIT=$(git rev-parse origin/$CURRENT_BRANCH 2>/dev/null || git rev-parse origin/main)
+        LOCAL_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+        REMOTE_COMMIT=$(git rev-parse origin/$CURRENT_BRANCH 2>/dev/null || git rev-parse origin/main 2>/dev/null)
         
-        if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
+        if [ -n "$LOCAL_COMMIT" ] && [ -n "$REMOTE_COMMIT" ] && [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
             log_info "🆕 發現遠程更新，正在拉取..."
             
             # 嘗試合併或重置
-            if git pull origin $CURRENT_BRANCH; then
+            if git pull origin $CURRENT_BRANCH 2>/dev/null; then
                 log_success "✅ 代碼更新成功"
             else
                 log_warning "⚠️ 合併失敗，嘗試硬重置..."
-                git reset --hard origin/$CURRENT_BRANCH
-                log_success "✅ 代碼重置到最新版本"
+                if git reset --hard origin/$CURRENT_BRANCH 2>/dev/null; then
+                    log_success "✅ 代碼重置到最新版本"
+                else
+                    log_warning "⚠️ 重置失敗，繼續使用當前代碼"
+                fi
             fi
         else
             log_info "✅ 代碼已是最新版本"
         fi
         
         # 顯示當前提交信息
-        log_info "📋 當前提交: $(git log --oneline -1)"
+        log_info "📋 當前提交: $(git log --oneline -1 2>/dev/null || echo '無法獲取提交信息')"
         
     else
-        log_info "📥 首次運行，克隆代碼倉庫..."
+        log_info "📥 首次運行或Git倉庫損壞，重新克隆代碼倉庫..."
         
-        # 確保工作目錄是空的
+        # 清理可能損壞的Git倉庫和其他文件
+        log_info "🧹 清理工作目錄..."
+        rm -rf /app/.git
         rm -rf /app/*
-        rm -rf /app/.*
+        rm -rf /app/.* 2>/dev/null || true
         
         # 克隆倉庫
         if git clone "$REPO_URL" /tmp/repo; then
