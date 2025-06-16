@@ -60,6 +60,28 @@ check_docker_permissions() {
     fi
 }
 
+# 獲取腳本目錄並切換到Docker目錄
+get_docker_dir() {
+    # 獲取腳本所在目錄
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    DOCKER_DIR="$SCRIPT_DIR"
+    
+    # 如果不在docker目錄中，尋找docker目錄
+    if [[ ! -f "$DOCKER_DIR/docker-compose.yml" ]]; then
+        if [[ -f "$SCRIPT_DIR/../docker-compose.yml" ]]; then
+            DOCKER_DIR="$SCRIPT_DIR/.."
+        elif [[ -f "$SCRIPT_DIR/docker/docker-compose.yml" ]]; then
+            DOCKER_DIR="$SCRIPT_DIR/docker"
+        else
+            log_error "找不到docker-compose.yml文件"
+            exit 1
+        fi
+    fi
+    
+    log_info "Docker配置目錄: $DOCKER_DIR"
+    cd "$DOCKER_DIR"
+}
+
 # 檢查系統依賴
 check_dependencies() {
     log_info "檢查系統依賴..."
@@ -69,19 +91,25 @@ check_dependencies() {
         exit 1
     fi
     
-    # 檢查Docker Compose (新版本使用 docker compose)
-    if ! $DOCKER_CMD compose version &> /dev/null; then
-        log_error "Docker Compose未安裝或不支援，請先安裝Docker Compose"
-        exit 1
-    fi
-    
     if ! command -v git &> /dev/null; then
         log_error "Git未安裝，請先安裝Git"
         exit 1
     fi
     
-    # 檢查Docker權限
+    # 檢查Docker權限並設置命令前綴
     check_docker_permissions
+    
+    # 切換到Docker配置目錄
+    get_docker_dir
+    
+    # 檢查Docker Compose (在權限檢查後)
+    if ! $DOCKER_COMPOSE_CMD version &> /dev/null; then
+        log_error "Docker Compose未安裝或不支援，請先安裝Docker Compose"
+        log_info "嘗試安裝Docker Compose:"
+        log_info "1. 官方安裝: https://docs.docker.com/compose/install/"
+        log_info "2. 或使用包管理器: sudo apt-get install docker-compose-plugin"
+        exit 1
+    fi
     
     log_success "系統依賴檢查完成"
 }
@@ -89,6 +117,13 @@ check_dependencies() {
 # 準備本機目錄結構
 prepare_directories() {
     log_info "準備本機目錄結構..."
+    
+    # 回到原始工作目錄
+    ORIGINAL_DIR="$(pwd)"
+    if [[ "$ORIGINAL_DIR" == */docker ]]; then
+        ORIGINAL_DIR="$(dirname "$ORIGINAL_DIR")"
+    fi
+    cd "$ORIGINAL_DIR"
     
     # 檢查並創建assign_manager目錄
     if [ ! -d "$LOCAL_DIR" ]; then
@@ -104,7 +139,7 @@ prepare_directories() {
         log_info "更新現有代碼..."
         cd "$LOCAL_DIR"
         git pull origin main
-        cd ..
+        cd "$ORIGINAL_DIR"
     fi
     
     # 檢查並創建result目錄
@@ -128,7 +163,10 @@ prepare_directories() {
     fi
     
     log_success "目錄結構準備完成"
-    log_info "本機掛載目錄: $(pwd)/$LOCAL_DIR"
+    log_info "本機掛載目錄: $ORIGINAL_DIR/$LOCAL_DIR"
+    
+    # 回到Docker配置目錄
+    cd "$DOCKER_DIR"
 }
 
 # 構建Docker映像
@@ -255,6 +293,31 @@ fix_docker_permissions() {
     fi
 }
 
+# 檢查Docker Compose安裝
+check_compose_installation() {
+    log_info "檢查Docker Compose安裝..."
+    
+    # 檢查不同的Docker Compose安裝方式
+    if command -v docker-compose &> /dev/null; then
+        log_info "發現 docker-compose (v1版本)"
+        echo "Docker Compose v1版本: $(docker-compose --version)"
+    fi
+    
+    if docker compose version &> /dev/null 2>&1; then
+        log_info "發現 docker compose (v2版本)"
+        echo "Docker Compose v2版本: $(docker compose version)"
+    elif sudo docker compose version &> /dev/null 2>&1; then
+        log_info "發現 docker compose (v2版本，需要sudo)"
+        echo "Docker Compose v2版本 (sudo): $(sudo docker compose version)"
+    fi
+    
+    # 提供安裝建議
+    log_info "如果上述都沒有輸出，請安裝Docker Compose:"
+    log_info "Ubuntu/Debian: sudo apt-get update && sudo apt-get install docker-compose-plugin"
+    log_info "CentOS/RHEL: sudo yum install docker-compose-plugin"
+    log_info "或參考官方文檔: https://docs.docker.com/compose/install/"
+}
+
 # 顯示幫助信息
 show_help() {
     echo "工作分配管理系統 - Docker管理腳本"
@@ -263,32 +326,35 @@ show_help() {
     echo "使用方法: $0 [選項]"
     echo ""
     echo "選項:"
-    echo "  start     準備目錄、構建並啟動服務"
-    echo "  stop      停止服務"
-    echo "  restart   重啟服務"
-    echo "  status    查看服務狀態"
-    echo "  logs      查看服務日誌"
-    echo "  build     僅構建Docker映像"
-    echo "  update    更新代碼"
-    echo "  rebuild   重新構建並重啟服務"
-    echo "  cleanup   清理Docker資源"
-    echo "  fix-perm  修復Docker權限問題"
-    echo "  help      顯示此幫助信息"
+    echo "  start       準備目錄、構建並啟動服務"
+    echo "  stop        停止服務"
+    echo "  restart     重啟服務"
+    echo "  status      查看服務狀態"
+    echo "  logs        查看服務日誌"
+    echo "  build       僅構建Docker映像"
+    echo "  update      更新代碼"
+    echo "  rebuild     重新構建並重啟服務"
+    echo "  cleanup     清理Docker資源"
+    echo "  fix-perm    修復Docker權限問題"
+    echo "  check-comp  檢查Docker Compose安裝"
+    echo "  help        顯示此幫助信息"
     echo ""
     echo "範例:"
-    echo "  $0 start      # 一鍵啟動所有服務"
-    echo "  $0 logs       # 查看服務日誌"
-    echo "  $0 status     # 檢查服務狀態"
-    echo "  $0 update     # 更新代碼"
-    echo "  $0 fix-perm   # 修復Docker權限"
+    echo "  $0 start        # 一鍵啟動所有服務"
+    echo "  $0 logs         # 查看服務日誌"
+    echo "  $0 status       # 檢查服務狀態"
+    echo "  $0 update       # 更新代碼"
+    echo "  $0 fix-perm     # 修復Docker權限"
+    echo "  $0 check-comp   # 檢查Docker Compose"
     echo ""
     echo "GitHub倉庫: $REPO_URL"
     echo "本機目錄: $(pwd)/$LOCAL_DIR"
     echo ""
     echo "常見問題解決："
     echo "1. 權限問題: $0 fix-perm"
-    echo "2. 服務異常: $0 rebuild"
-    echo "3. 清理重置: $0 cleanup && $0 start"
+    echo "2. Compose問題: $0 check-comp"
+    echo "3. 服務異常: $0 rebuild"
+    echo "4. 清理重置: $0 cleanup && $0 start"
 }
 
 # 主函數
@@ -334,6 +400,9 @@ main() {
             ;;
         "fix-perm")
             fix_docker_permissions
+            ;;
+        "check-comp")
+            check_compose_installation
             ;;
         "help"|"-h"|"--help")
             show_help
