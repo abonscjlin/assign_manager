@@ -355,6 +355,63 @@ cleanup() {
     log_warning "注意: Docker專用目錄 $HOME/docker/assign_manager 未被刪除"
 }
 
+# 完全清理系統（包括所有Docker資源）- 危險操作
+clean_all() {
+    log_warning "警告: 這將清理所有Docker資源，包括其他項目！"
+    echo -n "確定要繼續嗎？輸入 'YES' 確認: "
+    read -r confirmation
+    
+    if [ "$confirmation" != "YES" ]; then
+        log_info "操作已取消"
+        return 0
+    fi
+    
+    log_info "執行完全系統清理..."
+    $DOCKER_COMPOSE_CMD down -v
+    $DOCKER_CMD system prune -af --volumes
+    log_success "完全系統清理完成"
+}
+
+# 完全清理並重建
+clean() {
+    log_info "完全清理assign-manager容器和映像..."
+    
+    # 停止並移除容器和網絡
+    log_info "停止並移除assign-manager容器和網絡..."
+    $DOCKER_COMPOSE_CMD down -v
+    
+    # 移除相關映像
+    log_info "移除assign-manager相關映像..."
+    IMAGES=$($DOCKER_CMD images --format "{{.Repository}}:{{.Tag}}" | grep -E "(assign-manager|docker-assign-manager)" || true)
+    
+    if [ -n "$IMAGES" ]; then
+        echo "找到以下相關映像："
+        echo "$IMAGES"
+        
+        for IMAGE in $IMAGES; do
+            log_info "移除映像: $IMAGE"
+            $DOCKER_CMD rmi "$IMAGE" || log_warning "無法移除映像: $IMAGE"
+        done
+    else
+        log_info "未找到assign-manager相關映像"
+    fi
+    
+    # 清理未使用的網絡（僅限docker_default等相關網絡）
+    log_info "清理項目相關的未使用網絡..."
+    NETWORKS=$($DOCKER_CMD network ls --format "{{.Name}}" | grep -E "(docker_default|assign.*manager)" || true)
+    
+    if [ -n "$NETWORKS" ]; then
+        for NETWORK in $NETWORKS; do
+            log_info "移除網絡: $NETWORK"
+            $DOCKER_CMD network rm "$NETWORK" 2>/dev/null || log_warning "無法移除網絡: $NETWORK (可能仍在使用中)"
+        done
+    fi
+    
+    log_success "完全清理完成"
+    log_info "現在可以運行 '$0 start' 來啟動全新的容器"
+    log_warning "注意: 僅清理了assign-manager相關的容器和映像，其他Docker資源未受影響"
+}
+
 # 修復Docker權限
 fix_docker_permissions() {
     log_info "嘗試修復Docker權限..."
@@ -414,6 +471,8 @@ show_help() {
     echo "  update      僅更新代碼"
     echo "  rebuild     重新構建並重啟服務"
     echo "  cleanup     清理Docker資源"
+    echo "  clean       完全清理assign-manager容器和映像"
+    echo "  clean-all   清理所有Docker資源（危險操作）"
     echo "  fix-perm    修復Docker權限問題"
     echo "  check-comp  檢查Docker Compose安裝"
     echo "  help        顯示此幫助信息"
@@ -424,6 +483,8 @@ show_help() {
     echo "  $0 logs         # 查看服務日誌"
     echo "  $0 status       # 檢查服務狀態"
     echo "  $0 update       # 僅更新代碼"
+    echo "  $0 clean        # 清理assign-manager相關資源"
+    echo "  $0 clean-all    # 清理所有Docker資源（危險）"
     echo "  $0 fix-perm     # 修復Docker權限"
     echo ""
     echo "GitHub倉庫: $REPO_URL"
@@ -433,7 +494,8 @@ show_help() {
     echo "1. 權限問題: $0 fix-perm"
     echo "2. Compose問題: $0 check-comp"
     echo "3. 服務異常: $0 rebuild"
-    echo "4. 清理重置: $0 cleanup && $0 start"
+    echo "4. 完全重置: $0 clean && $0 start"
+    echo "5. 清理資源: $0 cleanup"
 }
 
 # 主函數
@@ -484,6 +546,14 @@ main() {
         "cleanup")
             check_dependencies
             cleanup
+            ;;
+        "clean")
+            check_dependencies
+            clean
+            ;;
+        "clean-all")
+            check_dependencies
+            clean_all
             ;;
         "fix-perm")
             fix_docker_permissions
