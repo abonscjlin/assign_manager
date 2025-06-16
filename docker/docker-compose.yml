@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   assign-manager-api:
     # 使用當前目錄的Dockerfile構建映像

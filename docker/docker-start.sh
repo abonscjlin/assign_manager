@@ -16,6 +16,10 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/abonscjlin/assign_manager.git"
 LOCAL_DIR="assign_manager"
 
+# Docker命令前綴
+DOCKER_CMD=""
+DOCKER_COMPOSE_CMD=""
+
 # 日誌函數
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -33,6 +37,29 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# 檢查Docker權限並設置命令前綴
+check_docker_permissions() {
+    log_info "檢查Docker權限..."
+    
+    # 測試Docker命令是否需要sudo
+    if docker info >/dev/null 2>&1; then
+        log_success "Docker權限正常"
+        DOCKER_CMD="docker"
+        DOCKER_COMPOSE_CMD="docker compose"
+    elif sudo docker info >/dev/null 2>&1; then
+        log_warning "需要sudo權限運行Docker"
+        DOCKER_CMD="sudo docker"
+        DOCKER_COMPOSE_CMD="sudo docker compose"
+    else
+        log_error "Docker不可用或權限不足"
+        log_info "請嘗試以下解決方案："
+        log_info "1. 將用戶添加到docker組: sudo usermod -aG docker \$USER"
+        log_info "2. 重新登錄或重啟系統"
+        log_info "3. 或者確保Docker daemon正在運行"
+        exit 1
+    fi
+}
+
 # 檢查系統依賴
 check_dependencies() {
     log_info "檢查系統依賴..."
@@ -43,7 +70,7 @@ check_dependencies() {
     fi
     
     # 檢查Docker Compose (新版本使用 docker compose)
-    if ! docker compose version &> /dev/null; then
+    if ! $DOCKER_CMD compose version &> /dev/null; then
         log_error "Docker Compose未安裝或不支援，請先安裝Docker Compose"
         exit 1
     fi
@@ -52,6 +79,9 @@ check_dependencies() {
         log_error "Git未安裝，請先安裝Git"
         exit 1
     fi
+    
+    # 檢查Docker權限
+    check_docker_permissions
     
     log_success "系統依賴檢查完成"
 }
@@ -104,27 +134,27 @@ prepare_directories() {
 # 構建Docker映像
 build_image() {
     log_info "構建Docker映像..."
-    docker compose build --build-arg REPO_URL="$REPO_URL"
+    $DOCKER_COMPOSE_CMD build --build-arg REPO_URL="$REPO_URL"
     log_success "Docker映像構建完成"
 }
 
 # 啟動服務
 start_service() {
     log_info "啟動工作分配管理系統API服務..."
-    docker compose up -d
+    $DOCKER_COMPOSE_CMD up -d
     
     # 等待服務啟動
     log_info "等待服務啟動..."
     sleep 15
     
     # 檢查服務狀態
-    if docker compose ps | grep -q "Up"; then
+    if $DOCKER_COMPOSE_CMD ps | grep -q "Up"; then
         log_success "服務啟動成功！"
         log_info "API服務地址: http://localhost:7777"
         log_info "健康檢查: http://localhost:7777/health"
         log_info "本機掛載目錄: $(pwd)/$LOCAL_DIR"
         log_info "結果輸出目錄: $(pwd)/$LOCAL_DIR/result"
-        log_info "查看日誌: docker compose logs -f"
+        log_info "查看日誌: $DOCKER_COMPOSE_CMD logs -f"
         
         # 嘗試健康檢查
         sleep 5
@@ -134,7 +164,7 @@ start_service() {
             log_warning "API服務可能尚未完全啟動，請稍候再試"
         fi
     else
-        log_error "服務啟動失敗，請檢查日誌: docker compose logs"
+        log_error "服務啟動失敗，請檢查日誌: $DOCKER_COMPOSE_CMD logs"
         exit 1
     fi
 }
@@ -142,27 +172,27 @@ start_service() {
 # 停止服務
 stop_service() {
     log_info "停止服務..."
-    docker compose down
+    $DOCKER_COMPOSE_CMD down
     log_success "服務已停止"
 }
 
 # 重啟服務
 restart_service() {
     log_info "重啟服務..."
-    docker compose restart
+    $DOCKER_COMPOSE_CMD restart
     log_success "服務重啟完成"
 }
 
 # 查看日誌
 view_logs() {
     log_info "查看服務日誌..."
-    docker compose logs -f
+    $DOCKER_COMPOSE_CMD logs -f
 }
 
 # 查看服務狀態
 check_status() {
     log_info "檢查服務狀態..."
-    docker compose ps
+    $DOCKER_COMPOSE_CMD ps
     
     log_info "檢查本機目錄..."
     echo "本機掛載目錄: $(pwd)/$LOCAL_DIR"
@@ -195,7 +225,7 @@ update_code() {
 # 重新構建並重啟
 rebuild_and_restart() {
     log_info "重新構建並重啟服務..."
-    docker compose down
+    $DOCKER_COMPOSE_CMD down
     prepare_directories
     build_image
     start_service
@@ -204,10 +234,25 @@ rebuild_and_restart() {
 # 清理資源
 cleanup() {
     log_info "清理Docker資源..."
-    docker compose down -v
-    docker system prune -f
+    $DOCKER_COMPOSE_CMD down -v
+    $DOCKER_CMD system prune -f
     log_success "清理完成"
     log_warning "注意: 本機 $LOCAL_DIR 目錄未被刪除"
+}
+
+# 修復Docker權限
+fix_docker_permissions() {
+    log_info "嘗試修復Docker權限..."
+    log_info "將當前用戶添加到docker組..."
+    
+    if sudo usermod -aG docker $USER; then
+        log_success "用戶已添加到docker組"
+        log_warning "請重新登錄或重啟系統以使更改生效"
+        log_info "或者運行: newgrp docker"
+    else
+        log_error "添加用戶到docker組失敗"
+        exit 1
+    fi
 }
 
 # 顯示幫助信息
@@ -227,16 +272,23 @@ show_help() {
     echo "  update    更新代碼"
     echo "  rebuild   重新構建並重啟服務"
     echo "  cleanup   清理Docker資源"
+    echo "  fix-perm  修復Docker權限問題"
     echo "  help      顯示此幫助信息"
     echo ""
     echo "範例:"
-    echo "  $0 start    # 一鍵啟動所有服務"
-    echo "  $0 logs     # 查看服務日誌"
-    echo "  $0 status   # 檢查服務狀態"
-    echo "  $0 update   # 更新代碼"
+    echo "  $0 start      # 一鍵啟動所有服務"
+    echo "  $0 logs       # 查看服務日誌"
+    echo "  $0 status     # 檢查服務狀態"
+    echo "  $0 update     # 更新代碼"
+    echo "  $0 fix-perm   # 修復Docker權限"
     echo ""
     echo "GitHub倉庫: $REPO_URL"
     echo "本機目錄: $(pwd)/$LOCAL_DIR"
+    echo ""
+    echo "常見問題解決："
+    echo "1. 權限問題: $0 fix-perm"
+    echo "2. 服務異常: $0 rebuild"
+    echo "3. 清理重置: $0 cleanup && $0 start"
 }
 
 # 主函數
@@ -249,15 +301,19 @@ main() {
             start_service
             ;;
         "stop")
+            check_dependencies
             stop_service
             ;;
         "restart")
+            check_dependencies
             restart_service
             ;;
         "status")
+            check_dependencies
             check_status
             ;;
         "logs")
+            check_dependencies
             view_logs
             ;;
         "build")
@@ -273,7 +329,11 @@ main() {
             rebuild_and_restart
             ;;
         "cleanup")
+            check_dependencies
             cleanup
+            ;;
+        "fix-perm")
+            fix_docker_permissions
             ;;
         "help"|"-h"|"--help")
             show_help
