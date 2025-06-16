@@ -93,29 +93,70 @@ update_code() {
         log_info "📋 當前提交: $(git log --oneline -1 2>/dev/null || echo '無法獲取提交信息')"
         
     else
-        log_info "📥 首次運行或Git倉庫損壞，重新克隆代碼倉庫..."
-        
-        # 清理可能損壞的Git倉庫和其他文件
-        log_info "🧹 清理工作目錄..."
-        rm -rf /app/.git
-        rm -rf /app/*
-        rm -rf /app/.* 2>/dev/null || true
-        
-        # 克隆倉庫
-        if git clone "$REPO_URL" /tmp/repo; then
-            # 移動文件到工作目錄
-            mv /tmp/repo/.git /app/
-            mv /tmp/repo/* /app/ 2>/dev/null || true
-            mv /tmp/repo/.* /app/ 2>/dev/null || true
+        log_info "📥 首次運行或Git倉庫損壞/未初始化，準備克隆代碼倉庫..."
+
+        # 如果 /app/.git 存在並且是一個目錄 (通常是volume掛載點)，則清空其內容
+        # 這樣可以保留掛載點，同時為新的 .git 數據做準備
+        if [ -d "/app/.git" ]; then
+            log_info "🧹 清理現有的 /app/.git 目錄內容 (保留掛載點)..."
+            # 使用 find 刪除內容，避免直接 rm -rf 掛載點
+            find "/app/.git/" -mindepth 1 -delete 2>/dev/null || true
+        fi
+
+        # 清理 /app 目錄下的其他文件和目錄，但要小心保留 .git 掛載點本身
+        log_info "🧹 清理 /app 工作目錄 (保留 .git 掛載點)..."
+        # 使用 find 刪除 /app 下的內容，除了 .git 目錄本身及其內容
+        find /app -mindepth 1 -not -path "/app/.git" -not -path "/app/.git/*" -delete 2>/dev/null || true
+
+        log_info "📥 克隆倉庫 (分支: ${GIT_BRANCH:-main}) 到臨時目錄 /tmp/repo..."
+        # 使用 GIT_BRANCH 環境變量，如果未設置則默認為 main
+        # 克隆特定分支，使用 --depth 1 進行淺克隆以加快速度
+        if git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$REPO_URL" /tmp/repo; then
+            log_info "🚚 移動代碼到 /app..."
+
+            # 將克隆的 .git 目錄內容移動到 /app/.git (掛載點)
+            if [ -d "/app/.git" ]; then
+                log_info "🧬 移動 .git 數據到掛載的 /app/.git..."
+                # 確保目標是空的 (已被上面的find清理過，但再次確認)
+                find "/app/.git/" -mindepth 1 -delete 2>/dev/null || true 
+                # 移動 .git 的內容 (包括隱藏文件)
+                shopt -s dotglob
+                mv /tmp/repo/.git/* "/app/.git/" 2>/dev/null || true
+                shopt -u dotglob
+                log_info "✅ .git 數據成功移動到 /app/.git"
+            else
+                # 如果 /app/.gits 不是預期的掛載點 (理論上不應發生)
+                # 則直接移動整個 .git 目錄
+                log_warning "⚠️ /app/.git 不是預期掛載點，將移動整個 .git 目錄"
+                mv /tmp/repo/.git /app/
+            fi
+
+            # 移動應用程式文件 (除了.git目錄本身)
+            log_info "📄 移動應用程式檔案..."
+            # 確保 /app 目錄存在
+            mkdir -p /app
+            # 先將 /tmp/repo 下的非 .git 內容複製到 /app
+            # 使用 rsync 可以更好地處理目錄和文件
+            rsync -av --exclude='.git' /tmp/repo/ /app/ 2>/dev/null || true
             
             # 清理臨時目錄
             rm -rf /tmp/repo
-            
+
             cd /app
-            log_success "✅ 代碼克隆成功"
-            log_info "📋 當前提交: $(git log --oneline -1)"
+            # 驗證現在 /app 是否為有效的Git倉庫
+            if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+                log_success "✅ 代碼克隆並設置成功"
+                log_info "🌿 當前分支: $(git branch --show-current 2>/dev/null || echo '無法確定分支')"
+                log_info "📋 當前提交: $(git log --oneline -1 2>/dev/null || echo '無法獲取提交信息')"
+            else
+                log_error "❌ 克隆後 /app 不是有效的Git倉庫。請檢查volume掛載和權限。"
+                # 可以考慮列出/app和/app/.git的內容以供調試
+                ls -la /app
+                if [ -d /app/.git ]; then ls -la /app/.git; fi
+                exit 1
+            fi
         else
-            log_error "❌ 代碼克隆失敗"
+            log_error "❌ 代碼克隆失敗 (git clone --depth 1 --branch '${GIT_BRANCH:-main}' '$REPO_URL' /tmp/repo)"
             exit 1
         fi
     fi
